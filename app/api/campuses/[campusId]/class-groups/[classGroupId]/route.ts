@@ -10,10 +10,10 @@ const classGroupSchema = z.object({
 // GET a specific class group
 export async function GET(
     request: NextRequest,
-    { params }: { params: { campusId: string; classGroupId: string } }
+    { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
-        const { campusId, classGroupId } = params;
+        const { campusId, classGroupId } = await params;
 
         const classGroup = await prisma.classGroup.findFirst({
             where: {
@@ -49,10 +49,10 @@ export async function GET(
 // PUT update a class group
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { campusId: string; classGroupId: string } }
+    { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
-        const { campusId, classGroupId } = params;
+        const { campusId, classGroupId } = await params;
         const body = await request.json();
 
         const validatedData = classGroupSchema.parse(body);
@@ -97,10 +97,10 @@ export async function PUT(
 // DELETE a class group
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { campusId: string; classGroupId: string } }
+    { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
-        const { campusId, classGroupId } = params;
+        const { campusId, classGroupId } = await params;
 
         // Verify class group exists and belongs to campus
         const existingClassGroup = await prisma.classGroup.findFirst({

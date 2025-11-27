@@ -10,10 +10,10 @@ const classGroupSchema = z.object({
 // GET all class groups for a campus
 export async function GET(
     request: NextRequest,
-    { params }: { params: { campusId: string } }
+    { params }: { params: Promise<{ campusId: string }> }
 ) {
     try {
-        const { campusId } = params;
+        const { campusId } = await params;
 
         const classGroups = await prisma.classGroup.findMany({
             where: { campusId },
@@ -33,10 +33,10 @@ export async function GET(
 // POST create a new class group
 export async function POST(
     request: NextRequest,
-    { params }: { params: { campusId: string } }
+    { params }: { params: Promise<{ campusId: string }> }
 ) {
     try {
-        const { campusId } = params;
+        const { campusId } = await params;
         const body = await request.json();
 
         const validatedData = classGroupSchema.parse(body);

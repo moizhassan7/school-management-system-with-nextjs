@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 const campusSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -24,6 +25,7 @@ interface CampusFormProps {
 
 export default function CampusForm({ schoolId, campusId, initialData }: CampusFormProps) {
     const router = useRouter();
+    const { refreshData } = useSidebar();
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -65,6 +67,7 @@ export default function CampusForm({ schoolId, campusId, initialData }: CampusFo
                 throw new Error(result.error || 'Failed to save campus');
             }
 
+            await refreshData();
             router.push(`/schools/${schoolId}/campuses`);
             router.refresh();
         } catch (error) {

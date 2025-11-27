@@ -1,12 +1,14 @@
-// This is my home page show a logo there
-
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 export default function Home() {
-  return (
-    <main>
-      <div className="flex justify-center items-center h-screen">
-        <img src="https://static.vecteezy.com/system/resources/thumbnails/004/297/596/small/education-logo-open-book-dictionary-textbook-or-notebook-with-sunrice-icon-modern-emblem-idea-concept-design-for-business-libraries-schools-universities-educational-courses-vector.jpg" alt="Logo" className="w-48 h-48" />
-      </div>
-    </main>
-  );
+    return (
+     <main>
+          <h1 className="text-2xl font-bold p-4">Welcome to School Management System</h1>
+          <p className="text-gray-500 p-4">Search for schools, campuses, classes, and students</p>
+          <div className="flex items-center gap-2 p-4">
+            <Input placeholder="Search" className="flex-1" />
+            <Search className="w-6 h-6" />
+          </div>
+     </main>
+    );
 }
-

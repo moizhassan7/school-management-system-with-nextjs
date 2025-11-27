@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 const schoolSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -15,6 +16,7 @@ const schoolSchema = z.object({
 
 export default function SchoolForm() {
     const router = useRouter();
+    const { refreshData } = useSidebar();
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export default function SchoolForm() {
                 throw new Error('Failed to create school');
             }
 
+            await refreshData();
             router.push('/');
             router.refresh();
         } catch (error) {

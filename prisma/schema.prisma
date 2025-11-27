@@ -14,6 +14,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  UNSPECIFIED
+}
+
 model School {
   id        String   @id @default(cuid())
   name      String
@@ -23,6 +30,8 @@ model School {
   phone     String
   logoPath  String?
   campuses  Campus[]
+  users     User[]
+  academicYears AcademicYear[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -46,6 +55,120 @@ model ClassGroup {
   description String?
   campusId    String
   campus      Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  subjectGroups SubjectGroup[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+model SubjectGroup{
+
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  classGroupId String
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  subjects    Subject[]
+  classes     Class[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Class {
+  id             String       @id @default(cuid())
+  name           String
+  subjectGroupId String
+  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
+  sections       Section[]
+  studentRecords StudentRecord[]
+  yearRecords    AcademicYearStudentRecord[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model User {
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  passwordHash      String
+  city              String?
+  religion          String?
+  emailVerified     Boolean  @default(false)
+  emailVerifiedAt   DateTime?
+  profilePath       String?
+  schoolId          String
+  school            School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  gender            Gender   @default(UNSPECIFIED)
+  phone             String?
+  address           String?
+  deletedAt         DateTime?
+  suspended         Boolean  @default(false)
+  locked            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  studentRecord     StudentRecord?
+
+  @@index([schoolId])
+}
+
+model Subject{
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  subjectGroupId String
+  subjectGroup SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  startYear String
+  stopYear  String
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  records   AcademicYearStudentRecord[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, startYear, stopYear])
+}
+
+model Section {
+  id        String @id @default(cuid())
+  name      String
+  classId   String
+  myClass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  students  StudentRecord[]
+  yearRecords AcademicYearStudentRecord[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudentRecord {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admissionNumber  String?
+  admissionDate    DateTime
+  classId          String?
+  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sectionId        String?
+  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYearRecords AcademicYearStudentRecord[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model AcademicYearStudentRecord {
+  id              String   @id @default(cuid())
+  academicYearId  String
+  academicYear    AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  studentRecordId String
+  studentRecord   StudentRecord @relation(fields: [studentRecordId], references: [id], onDelete: Cascade)
+  classId         String?
+  myClass         Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sectionId       String?
+  section         Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

@@ -2,51 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { School, Building2, Home, Plus, ChevronDown, ChevronRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
-
-interface ClassGroup {
-    id: string;
-    name: string;
-}
-
-interface Campus {
-    id: string;
-    name: string;
-    classGroups: ClassGroup[];
-}
-
-interface SchoolWithCampuses {
-    id: string;
-    name: string;
-    initials: string;
-    campuses: Campus[];
-}
+import { School, Building2, Home, Plus, ChevronDown, ChevronRight, Users, BookOpen, Layers } from 'lucide-react';
+import { useState } from 'react';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 export default function Sidebar() {
     const pathname = usePathname();
-    const [schools, setSchools] = useState<SchoolWithCampuses[]>([]);
+    const { schools, classGroups } = useSidebar();
     const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
-    const [expandedCampuses, setExpandedCampuses] = useState<Set<string>>(new Set());
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        fetchSchools();
-    }, []);
-
-    const fetchSchools = async () => {
-        try {
-            const response = await fetch('/api/schools');
-            if (response.ok) {
-                const data = await response.json();
-                setSchools(data);
-            }
-        } catch (error) {
-            console.error('Error fetching schools:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const [expandedClassGroups, setExpandedClassGroups] = useState<Set<string>>(new Set());
 
     const toggleSchool = (schoolId: string) => {
         const newExpanded = new Set(expandedSchools);
@@ -58,14 +22,14 @@ export default function Sidebar() {
         setExpandedSchools(newExpanded);
     };
 
-    const toggleCampus = (campusId: string) => {
-        const newExpanded = new Set(expandedCampuses);
-        if (newExpanded.has(campusId)) {
-            newExpanded.delete(campusId);
+    const toggleClassGroup = (groupId: string) => {
+        const newExpanded = new Set(expandedClassGroups);
+        if (newExpanded.has(groupId)) {
+            newExpanded.delete(groupId);
         } else {
-            newExpanded.add(campusId);
+            newExpanded.add(groupId);
         }
-        setExpandedCampuses(newExpanded);
+        setExpandedClassGroups(newExpanded);
     };
 
     const isActive = (path: string) => {
@@ -78,7 +42,7 @@ export default function Sidebar() {
             <div className="p-6 border-b border-gray-700">
                 <h1 className="text-xl font-bold flex items-center gap-2">
                     <Building2 className="w-6 h-6" />
-                    School Manager
+                    ABC School
                 </h1>
             </div>
 
@@ -110,6 +74,33 @@ export default function Sidebar() {
                         >
                             <Plus className="w-5 h-5" />
                             <span className="font-medium">Add School</span>
+                        </Link>
+                    </li>
+
+                    {/* Users */}
+                    <li>
+                        <Link
+                            href="/users"
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive('/users')
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                }`}
+                        >
+                            <Users className="w-5 h-5" />
+                            <span className="font-medium">Users</span>
+                        </Link>
+                    </li>
+
+                    <li>
+                        <Link
+                            href="/subject-groups"
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive('/subject-groups')
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                }`}
+                        >
+                            <Layers className="w-5 h-5" />
+                            <span className="font-medium">Subject Groups</span>
                         </Link>
                     </li>
 
@@ -161,51 +152,103 @@ export default function Sidebar() {
                                         <ul className="ml-8 mt-1 space-y-1">
                                             {school.campuses.map((campus) => {
                                                 const campusPath = `/schools/${school.id}/campuses/${campus.id}`;
-                                                const isCampusExpanded = expandedCampuses.has(campus.id);
                                                 return (
                                                     <li key={campus.id}>
-                                                        <div>
-                                                            {/* Campus Item */}
-                                                            <div className="flex items-center">
-                                                                {campus.classGroups.length > 0 && (
-                                                                    <button
-                                                                        onClick={() => toggleCampus(campus.id)}
-                                                                        className="flex items-center gap-1 px-2 py-1 text-gray-400 hover:text-white transition-colors"
-                                                                    >
-                                                                        {isCampusExpanded ? (
-                                                                            <ChevronDown className="w-3 h-3" />
-                                                                        ) : (
-                                                                            <ChevronRight className="w-3 h-3" />
-                                                                        )}
-                                                                    </button>
-                                                                )}
-                                                                <Link
-                                                                    href={campusPath}
-                                                                    className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isActive(campusPath)
-                                                                            ? 'bg-indigo-600 text-white'
-                                                                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                                                                        } ${campus.classGroups.length === 0 ? 'ml-5' : ''}`}
-                                                                >
-                                                                    <Building2 className="w-3 h-3" />
-                                                                    <span className="truncate">{campus.name}</span>
-                                                                </Link>
-                                                            </div>
+                                                        <Link
+                                                            href={campusPath}
+                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isActive(campusPath)
+                                                                    ? 'bg-indigo-600 text-white'
+                                                                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                                                                } ml-5`}
+                                                        >
+                                                            <Building2 className="w-3 h-3" />
+                                                            <span className="truncate">{campus.name}</span>
+                                                        </Link>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+                                </div>
+                            </li>
+                        );
+                    })}
 
-                                                            {/* Class Groups (when campus is expanded) */}
-                                                            {isCampusExpanded && campus.classGroups.length > 0 && (
-                                                                <ul className="ml-8 mt-1 space-y-1">
-                                                                    {campus.classGroups.map((classGroup) => {
-                                                                        const classGroupPath = `/schools/${school.id}/campuses/${campus.id}/class-groups/${classGroup.id}`;
+                    {/* Divider for Class Groups */}
+                    {classGroups.length > 0 && (
+                        <li className="pt-4 pb-2">
+                            <div className="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                Class Groups
+                            </div>
+                        </li>
+                    )}
+
+                    {/* Class Groups List */}
+                    {classGroups.map((group) => {
+                        const isExpanded = expandedClassGroups.has(group.id);
+                        const groupPath = `/class-groups/${group.id}`;
+
+                        return (
+                            <li key={group.id}>
+                                <div>
+                                    <div className="flex items-center">
+                                        <button
+                                            onClick={() => toggleClassGroup(group.id)}
+                                            className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                                        >
+                                            {isExpanded ? (
+                                                <ChevronDown className="w-4 h-4" />
+                                            ) : (
+                                                <ChevronRight className="w-4 h-4" />
+                                            )}
+                                        </button>
+                                        <Link
+                                            href={groupPath}
+                                            className={`flex-1 flex items-center gap-2 px-2 py-2 rounded-lg transition-colors ${isActive(groupPath)
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                                                }`}
+                                        >
+                                            <Users className="w-4 h-4" />
+                                            <span className="text-sm font-medium truncate">
+                                                {group.name}
+                                            </span>
+                                        </Link>
+                                    </div>
+
+                                    {/* Subject Groups and Classes (when expanded) */}
+                                    {isExpanded && group.subjectGroups && group.subjectGroups.length > 0 && (
+                                        <ul className="ml-8 mt-1 space-y-1">
+                                            {group.subjectGroups.map((sg) => {
+                                                const sgPath = `/subject-groups/${sg.id}`;
+                                                return (
+                                                    <li key={sg.id}>
+                                                        <div className="ml-5">
+                                                            <Link
+                                                                href={sgPath}
+                                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${isActive(sgPath)
+                                                                        ? 'bg-indigo-600 text-white'
+                                                                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                                                                    }`}
+                                                            >
+                                                                <Layers className="w-3 h-3" />
+                                                                <span className="truncate">{sg.name}</span>
+                                                            </Link>
+                                                            {sg.classes && sg.classes.length > 0 && (
+                                                                <ul className="ml-6 mt-1 space-y-1">
+                                                                    {sg.classes.map((cls) => {
+                                                                        const classPath = `/subject-groups/${sg.id}`;
                                                                         return (
-                                                                            <li key={classGroup.id}>
+                                                                            <li key={cls.id}>
                                                                                 <Link
-                                                                                    href={classGroupPath}
-                                                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${isActive(classGroupPath)
+                                                                                    href={classPath}
+                                                                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${isActive(classPath)
                                                                                             ? 'bg-indigo-600 text-white'
-                                                                                            : 'text-gray-500 hover:bg-gray-800 hover:text-white'
+                                                                                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                                                                                         }`}
                                                                                 >
-                                                                                    <span className="truncate">{classGroup.name}</span>
+                                                                                    <BookOpen className="w-3 h-3" />
+                                                                                    <span className="truncate">{cls.name}</span>
                                                                                 </Link>
                                                                             </li>
                                                                         );

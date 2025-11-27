@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useSidebar } from '@/contexts/SidebarContext';
 
 interface ClassGroupFormProps {
     schoolId: string;
@@ -20,6 +21,7 @@ interface ClassGroupFormProps {
 
 export function ClassGroupForm({ schoolId, campusId, initialData }: ClassGroupFormProps) {
     const router = useRouter();
+    const { refreshData } = useSidebar();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +55,7 @@ export function ClassGroupForm({ schoolId, campusId, initialData }: ClassGroupFo
                 throw new Error(data.error || 'Failed to save class group');
             }
 
+            await refreshData();
             router.push(`/schools/${schoolId}/campuses/${campusId}`);
             router.refresh();
         } catch (err) {
