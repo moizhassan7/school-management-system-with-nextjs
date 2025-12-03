@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import crypto from 'crypto'
+import { auth } from '@/auth'
 
 const studentSchema = z.object({
   admissionNumber: z.string().optional(),
@@ -34,8 +35,16 @@ const userSchema = z.object({
 
 export async function GET() {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const schoolId = session?.user?.schoolId;
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    const where = role === 'SUPER_ADMIN' ? { deletedAt: null } : { deletedAt: null, schoolId };
     const users = await prisma.user.findMany({
-      where: { deletedAt: null },
+      where,
       include: { school: true },
       orderBy: { createdAt: 'desc' },
     })
@@ -47,6 +56,13 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const schoolId = session?.user?.schoolId;
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const body = await request.json()
     const data = userSchema.parse(body)
 
@@ -62,7 +78,7 @@ export async function POST(request: Request) {
         emailVerified: data.emailVerified ?? false,
         emailVerifiedAt: (data.emailVerified ?? false) ? new Date() : null,
         profilePath: data.profilePath || null,
-        schoolId: data.schoolId,
+        schoolId: role === 'SUPER_ADMIN' ? data.schoolId : schoolId,
         gender: data.gender ?? 'UNSPECIFIED',
         phone: data.phone || null,
         address: data.address || null,

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../node_modules/.prisma/client"
@@ -14,12 +8,49 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- ENUMS ---
 enum Gender {
   MALE
   FEMALE
   OTHER
   UNSPECIFIED
 }
+
+enum FeeType {
+  MONTHLY
+  ONE_TIME
+  ANNUALLY
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  ONLINE
+  CHEQUE
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+  ACCOUNTANT
+}
+
+// --- SCHOOL HIERARCHY ---
 
 model School {
   id        String   @id @default(cuid())
@@ -29,9 +60,13 @@ model School {
   email     String
   phone     String
   logoPath  String?
+  
   campuses  Campus[]
   users     User[]
   academicYears AcademicYear[]
+  feeHeads  FeeHead[] // Relation to Finance
+  GradeSystems GradeSystem[] // Relation to Examination
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -55,12 +90,14 @@ model ClassGroup {
   description String?
   campusId    String
   campus      Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  gradeSystemId String?
+  gradeSystem GradeSystem? @relation(fields: [gradeSystemId], references: [id], onDelete: SetNull)
   subjectGroups SubjectGroup[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
-model SubjectGroup{
 
+model SubjectGroup{
   id          String   @id @default(cuid())
   name        String
   description String?
@@ -80,9 +117,26 @@ model Class {
   sections       Section[]
   studentRecords StudentRecord[]
   yearRecords    AcademicYearStudentRecord[]
+  feeStructures  FeeStructure[] // Relation to Finance
+  examConfigurations ExamConfiguration[]
+  examResults    ExamResult[]
+
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 }
+
+model Section {
+  id        String @id @default(cuid())
+  name      String
+  classId   String
+  myClass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  students  StudentRecord[]
+  yearRecords AcademicYearStudentRecord[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- USER & ACADEMIC RECORDS ---
 
 model User {
   id                String   @id @default(cuid())
@@ -102,20 +156,72 @@ model User {
   deletedAt         DateTime?
   suspended         Boolean  @default(false)
   locked            Boolean  @default(false)
+  
+  // Relations
+  studentRecord     StudentRecord?
+  parentRecord      ParentRecord?
+  invoices          Invoice[]        // Relation to Finance
+  studentDiscounts  StudentDiscount[] // Relation to Discounts
+  examResults       ExamResult[]     // Relation to Examination
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-
-  studentRecord     StudentRecord?
-
+  role Role @default(STUDENT)
   @@index([schoolId])
 }
 
-model Subject{
+model StudentRecord {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  admissionNumber  String?
+  admissionDate    DateTime
+  classId          String?
+  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sectionId        String?
+  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  academicYearRecords AcademicYearStudentRecord[]
+  parents          Kinship[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ParentRecord {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  occupation    String?
+  cnic          String?
+  officeAddress String?
+  
+  students      Kinship[]
+}
+
+model Kinship {
+  id              String        @id @default(cuid())
+  studentId       String
+  studentRecord   StudentRecord @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parentId        String
+  parentRecord    ParentRecord  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  relationship    String        // FATHER, MOTHER, etc.
+  isPrimary       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([studentId, parentId])
+}
+
+model Subject {
   id          String   @id @default(cuid())
   name        String
   description String?
   subjectGroupId String
   subjectGroup SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
+  examConfigurations ExamConfiguration[]
+  examResults ExamResult[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -127,36 +233,11 @@ model AcademicYear {
   schoolId  String
   school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   records   AcademicYearStudentRecord[]
+  exams     Exam[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([schoolId, startYear, stopYear])
-}
-
-model Section {
-  id        String @id @default(cuid())
-  name      String
-  classId   String
-  myClass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  students  StudentRecord[]
-  yearRecords AcademicYearStudentRecord[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model StudentRecord {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  admissionNumber  String?
-  admissionDate    DateTime
-  classId          String?
-  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
-  sectionId        String?
-  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  academicYearRecords AcademicYearStudentRecord[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 }
 
 model AcademicYearStudentRecord {
@@ -172,3 +253,199 @@ model AcademicYearStudentRecord {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+// --- FINANCE MODULE ---
+
+model FeeHead {
+  id          String   @id @default(cuid())
+  name        String
+  type        FeeType  @default(MONTHLY)
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  structures  FeeStructure[]
+  discounts   Discount[]
+  invoiceItems InvoiceItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FeeStructure {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2)
+  feeHeadId   String
+  feeHead     FeeHead  @relation(fields: [feeHeadId], references: [id], onDelete: Cascade)
+  classId     String
+  myClass     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  schoolId    String   
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([feeHeadId, classId])
+}
+
+model Discount {
+  id          String       @id @default(cuid())
+  name        String
+  value       Decimal      @db.Decimal(10, 2)
+  type        DiscountType @default(PERCENTAGE)
+  feeHeadId   String
+  feeHead     FeeHead      @relation(fields: [feeHeadId], references: [id], onDelete: Cascade)
+  schoolId    String
+  allocations StudentDiscount[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model StudentDiscount {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  discountId  String
+  discount    Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([studentId, discountId])
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNo     String        @unique
+  studentId     String
+  student       User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  month         Int
+  year          Int
+  dueDate       DateTime
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  status        InvoiceStatus @default(UNPAID)
+  items         InvoiceItem[]
+  payments      Payment[]     // Relation to Payments
+  schoolId      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model InvoiceItem {
+  id             String   @id @default(cuid())
+  amount         Decimal  @db.Decimal(10, 2)
+  originalAmount Decimal  @db.Decimal(10, 2)
+  discountAmount Decimal  @default(0) @db.Decimal(10, 2)
+  feeHeadId      String
+  feeHead        FeeHead  @relation(fields: [feeHeadId], references: [id])
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// NEW: Payment Model
+model Payment {
+  id            String        @id @default(cuid())
+  amount        Decimal       @db.Decimal(10, 2)
+  date          DateTime      @default(now())
+  method        PaymentMethod @default(CASH)
+  transactionId String?
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  schoolId      String
+  createdAt     DateTime      @default(now())
+}
+
+
+
+// --- EXAMINATION MODULE ---
+
+// 1. Grading Rules (e.g. "Standard High School Grading")
+model GradeSystem {
+  id           String   @id @default(cuid())
+  name         String   // e.g. "GPA 4.0", "Percentage Based"
+  description  String?
+  
+  schoolId     String
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  ranges       GradeRange[]
+  
+  // Which classes follow this system?
+  classGroups  ClassGroup[] // Relation to ClassGroup
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 2. The Rows in the Rule (e.g. A+ is 90-100)
+model GradeRange {
+  id            String      @id @default(cuid())
+  name          String      // e.g. "A+"
+  minPercent    Float       // e.g. 90
+  maxPercent    Float       // e.g. 100
+  gradePoint    Float       // e.g. 4.0
+  color         String?     // e.g. "green"
+  
+  gradeSystemId String
+  gradeSystem   GradeSystem @relation(fields: [gradeSystemId], references: [id], onDelete: Cascade)
+}
+
+// 3. The Exam Event (e.g. "Mid Term 2024")
+model Exam {
+  id             String   @id @default(cuid())
+  name           String   // e.g. "Final Term 2024"
+  startDate      DateTime
+  endDate        DateTime
+  
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  
+  schoolId       String
+  
+  // Configuration: Which subjects are in this exam?
+  configurations ExamConfiguration[]
+
+  // The actual marks entered by teachers
+  results        ExamResult[]
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// 4. Subject Settings per Exam (e.g. Math is 100 marks)
+model ExamConfiguration {
+  id          String   @id @default(cuid())
+  maxMarks    Float    @default(100)
+  passMarks   Float    @default(40)
+  
+  examId      String
+  exam        Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  
+  classId     String   // Specific to a class
+  myClass     Class    @relation(fields: [classId], references: [id])
+
+  @@unique([examId, subjectId, classId])
+}
+
+// 5. Student Result (e.g. Ali got 85 in Math)
+model ExamResult {
+  id              String   @id @default(cuid())
+  marksObtained   Float
+  remarks         String?
+  
+  examId          String
+  exam            Exam     @relation(fields: [examId], references: [id])
+  
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id])
+  
+  subjectId       String
+  subject         Subject  @relation(fields: [subjectId], references: [id])
+  
+  classId         String
+  myClass         Class    @relation(fields: [classId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([examId, studentId, subjectId])
+}
+

@@ -3,6 +3,26 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { 
+    Plus, 
+    Pencil, 
+    Trash2, 
+    ArrowLeft, 
+    Building2, 
+    MapPin, 
+    Phone, 
+    Mail 
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+    CardFooter,
+} from '@/components/ui/card';
 
 interface Campus {
     id: string;
@@ -79,102 +99,102 @@ export default function CampusesPage({ params }: { params: Promise<{ schoolId: s
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-4xl mx-auto text-center">
-                    <p className="text-gray-600">Loading...</p>
-                </div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <p className="text-muted-foreground animate-pulse">Loading school data...</p>
             </div>
         );
     }
 
     if (error || !school) {
         return (
-            <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-4xl mx-auto text-center">
-                    <p className="text-red-600">{error || 'School not found'}</p>
-                    <Link href="/" className="mt-4 inline-block text-indigo-600 hover:text-indigo-500">
-                        Go back to home
-                    </Link>
-                </div>
+            <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
+                <p className="text-destructive font-medium">{error || 'School not found'}</p>
+                <Link href="/">
+                    <Button variant="outline">
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Go back to home
+                    </Button>
+                </Link>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="mb-8">
-                    <Link href="/" className="text-indigo-600 hover:text-indigo-500 text-sm mb-2 inline-block">
-                        ← Back to Schools
-                    </Link>
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-gray-900">{school.name} - Campuses</h1>
-                            <p className="mt-2 text-sm text-gray-600">
-                                Manage all campuses for {school.initials}
-                            </p>
-                        </div>
-                        <Link
-                            href={`/schools/${schoolId}/campuses/new`}
-                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                            Add Campus
+        <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-6xl mx-auto space-y-8">
+                {/* Header Section */}
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <Link href="/">
+                            <Button variant="ghost" size="sm" className="pl-0 text-muted-foreground hover:text-foreground mb-2">
+                                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Schools
+                            </Button>
                         </Link>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">{school.name}</h1>
+                        <p className="text-muted-foreground">Manage campuses for {school.initials}</p>
                     </div>
+                    <Link href={`/schools/${schoolId}/campuses/new`}>
+                        <Button>
+                            <Plus className="mr-2 h-4 w-4" /> Add Campus
+                        </Button>
+                    </Link>
                 </div>
 
-                {/* Campus List */}
+                {/* Content Section */}
                 {campuses.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                        <p className="text-gray-600 mb-4">No campuses found for this school.</p>
-                        <Link
-                            href={`/schools/${schoolId}/campuses/new`}
-                            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-                        >
-                            Add First Campus
+                    <Card className="flex flex-col items-center justify-center p-12 text-center border-dashed">
+                        <div className="rounded-full bg-muted/50 p-4 mb-4">
+                            <Building2 className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-lg font-semibold">No campuses found</h3>
+                        <p className="text-muted-foreground mb-6 max-w-sm">
+                            This school doesn't have any campuses yet. Add a new campus to get started.
+                        </p>
+                        <Link href={`/schools/${schoolId}/campuses/new`}>
+                            <Button>Add First Campus</Button>
                         </Link>
-                    </div>
+                    </Card>
                 ) : (
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                        <ul className="divide-y divide-gray-200">
-                            {campuses.map((campus) => (
-                                <li key={campus.id} className="p-6 hover:bg-gray-50">
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <h3 className="text-lg font-semibold text-gray-900">{campus.name}</h3>
-                                            <div className="mt-2 space-y-1">
-                                                <p className="text-sm text-gray-600">
-                                                    <span className="font-medium">Address:</span> {campus.address}
-                                                </p>
-                                                <p className="text-sm text-gray-600">
-                                                    <span className="font-medium">Phone:</span> {campus.phone}
-                                                </p>
-                                                {campus.email && (
-                                                    <p className="text-sm text-gray-600">
-                                                        <span className="font-medium">Email:</span> {campus.email}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2 ml-4">
-                                            <Link
-                                                href={`/schools/${schoolId}/campuses/${campus.id}/edit`}
-                                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                onClick={() => handleDelete(campus.id)}
-                                                className="inline-flex items-center px-3 py-1.5 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                        {campuses.map((campus) => (
+                            <Card key={campus.id} className="flex flex-col hover:shadow-md transition-shadow">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2 text-xl">
+                                        <Building2 className="h-5 w-5 text-primary" />
+                                        {campus.name}
+                                    </CardTitle>
+                                    <CardDescription className="flex items-start gap-2 pt-1">
+                                        <MapPin className="h-4 w-4 mt-0.5 shrink-0" /> 
+                                        {campus.address}
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-1 space-y-3 text-sm text-muted-foreground">
+                                    <div className="flex items-center gap-2">
+                                        <Phone className="h-4 w-4" /> 
+                                        {campus.phone}
                                     </div>
-                                </li>
-                            ))}
-                        </ul>
+                                    {campus.email && (
+                                        <div className="flex items-center gap-2">
+                                            <Mail className="h-4 w-4" /> 
+                                            {campus.email}
+                                        </div>
+                                    )}
+                                </CardContent>
+                                <CardFooter className="flex justify-end gap-2 pt-4 border-t">
+                                    <Link href={`/schools/${schoolId}/campuses/${campus.id}/edit`}>
+                                        <Button variant="outline" size="sm">
+                                            <Pencil className="mr-2 h-3.5 w-3.5" /> Edit
+                                        </Button>
+                                    </Link>
+                                    <Button 
+                                        variant="destructive" 
+                                        size="sm"
+                                        onClick={() => handleDelete(campus.id)}
+                                    >
+                                        <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        ))}
                     </div>
                 )}
             </div>

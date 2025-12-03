@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import crypto from 'crypto'
+import { auth } from '@/auth'
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -24,6 +25,13 @@ export async function GET(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const schoolId = session?.user?.schoolId;
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const { userId } = await params
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -43,6 +51,9 @@ export async function GET(
     if (!user || user.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
+    if (role !== 'SUPER_ADMIN' && user.schoolId !== schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     return NextResponse.json(user)
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })
@@ -54,6 +65,13 @@ export async function PUT(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const schoolId = session?.user?.schoolId;
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const { userId } = await params
     const body = await request.json()
     const data = updateSchema.parse(body)
@@ -61,6 +79,9 @@ export async function PUT(
     const existing = await prisma.user.findUnique({ where: { id: userId } })
     if (!existing || existing.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    if (role !== 'SUPER_ADMIN' && existing.schoolId !== schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const passwordHash = data.password
@@ -106,10 +127,20 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const schoolId = session?.user?.schoolId;
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const { userId } = await params
     const existing = await prisma.user.findUnique({ where: { id: userId } })
     if (!existing || existing.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    if (role !== 'SUPER_ADMIN' && existing.schoolId !== schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     await prisma.user.update({
       where: { id: userId },

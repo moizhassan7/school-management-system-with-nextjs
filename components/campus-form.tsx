@@ -1,9 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSidebar } from '@/contexts/SidebarContext';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from '@/components/ui/form';
 
 const campusSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -12,6 +25,8 @@ const campusSchema = z.object({
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
 });
 
+type CampusFormValues = z.infer<typeof campusSchema>;
+
 interface CampusFormProps {
     schoolId: string;
     campusId?: string;
@@ -19,27 +34,30 @@ interface CampusFormProps {
         name: string;
         address: string;
         phone: string;
-        email?: string;
+        email?: string | null; // Prisma might return null
     };
 }
 
 export default function CampusForm({ schoolId, campusId, initialData }: CampusFormProps) {
     const router = useRouter();
     const { refreshData } = useSidebar();
-    const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
+    // 1. Initialize form
+    const form = useForm<CampusFormValues>({
+        resolver: zodResolver(campusSchema),
+        defaultValues: {
+            name: initialData?.name || '',
+            address: initialData?.address || '',
+            phone: initialData?.phone || '',
+            email: initialData?.email || '',
+        },
+    });
+
+    // 2. Submit Handler
+    const onSubmit = async (data: CampusFormValues) => {
         setIsSubmitting(true);
-        setErrors({});
-
-        const formData = new FormData(e.currentTarget);
-        const data = Object.fromEntries(formData.entries());
-
         try {
-            const validatedData = campusSchema.parse(data);
-
             const url = campusId
                 ? `/api/schools/${schoolId}/campuses/${campusId}`
                 : `/api/schools/${schoolId}/campuses`;
@@ -51,17 +69,20 @@ export default function CampusForm({ schoolId, campusId, initialData }: CampusFo
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(validatedData),
+                body: JSON.stringify(data),
             });
 
             if (!response.ok) {
                 const result = await response.json();
                 if (result.errors) {
-                    const fieldErrors: Record<string, string> = {};
-                    result.errors.forEach((issue: any) => {
-                        fieldErrors[issue.path[0]] = issue.message;
+                    // Map server-side Zod errors to the form
+                    Object.entries(result.errors).forEach(([key, message]) => {
+                        // @ts-ignore - dynamic key mapping
+                        form.setError(key as keyof CampusFormValues, { 
+                            type: 'server', 
+                            message: message as string 
+                        });
                     });
-                    setErrors(fieldErrors);
                     return;
                 }
                 throw new Error(result.error || 'Failed to save campus');
@@ -71,89 +92,101 @@ export default function CampusForm({ schoolId, campusId, initialData }: CampusFo
             router.push(`/schools/${schoolId}/campuses`);
             router.refresh();
         } catch (error) {
-            if (error instanceof z.ZodError) {
-                const fieldErrors: Record<string, string> = {};
-                error.issues.forEach((err) => {
-                    if (err.path) {
-                        fieldErrors[err.path[0] as string] = err.message;
-                    }
-                });
-                setErrors(fieldErrors);
-            } else {
-                console.error(error);
-                alert(error instanceof Error ? error.message : 'An error occurred. Please try again.');
-            }
+            console.error(error);
+            form.setError('root', {
+                message: error instanceof Error ? error.message : 'An error occurred. Please try again.'
+            });
         } finally {
             setIsSubmitting(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-            <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">Campus Name</label>
-                <input
-                    type="text"
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-w-md mx-auto p-6 bg-white rounded-lg shadow-md border">
+                
+                {/* Global Error Message */}
+                {form.formState.errors.root && (
+                    <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
+                        {form.formState.errors.root.message}
+                    </div>
+                )}
+
+                <FormField
+                    control={form.control}
                     name="name"
-                    id="name"
-                    defaultValue={initialData?.name}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Campus Name</FormLabel>
+                            <FormControl>
+                                <Input placeholder="e.g. North Campus" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
                 />
-                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-            </div>
 
-            <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700">Address</label>
-                <input
-                    type="text"
+                <FormField
+                    control={form.control}
                     name="address"
-                    id="address"
-                    defaultValue={initialData?.address}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Address</FormLabel>
+                            <FormControl>
+                                <Input placeholder="123 Main St" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
                 />
-                {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
-            </div>
 
-            <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
-                <input
-                    type="text"
+                <FormField
+                    control={form.control}
                     name="phone"
-                    id="phone"
-                    defaultValue={initialData?.phone}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Phone</FormLabel>
+                            <FormControl>
+                                <Input placeholder="+1 234 567 890" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
                 />
-                {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-            </div>
 
-            <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email (Optional)</label>
-                <input
-                    type="email"
+                <FormField
+                    control={form.control}
                     name="email"
-                    id="email"
-                    defaultValue={initialData?.email}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Email (Optional)</FormLabel>
+                            <FormControl>
+                                <Input type="email" placeholder="contact@campus.com" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
                 />
-                {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
 
-            <div className="flex gap-2">
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex-1 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                >
-                    {isSubmitting ? 'Saving...' : campusId ? 'Update Campus' : 'Add Campus'}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => router.push(`/schools/${schoolId}/campuses`)}
-                    className="flex-1 flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                    Cancel
-                </button>
-            </div>
-        </form>
+                <div className="flex gap-2 pt-2">
+                    <Button 
+                        type="submit" 
+                        disabled={isSubmitting} 
+                        className="flex-1"
+                    >
+                        {isSubmitting ? 'Saving...' : campusId ? 'Update Campus' : 'Add Campus'}
+                    </Button>
+                    
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.push(`/schools/${schoolId}/campuses`)}
+                        className="flex-1"
+                    >
+                        Cancel
+                    </Button>
+                </div>
+            </form>
+        </Form>
     );
 }

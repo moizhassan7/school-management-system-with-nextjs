@@ -2,8 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Plus, Search, Layers } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Layers, Save, X, ArrowRight } from 'lucide-react';
 import { useSidebar } from '@/contexts/SidebarContext';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+    CardFooter,
+} from '@/components/ui/card';
 
 interface SubjectGroup {
     id: string;
@@ -14,6 +27,7 @@ export default function ClassGroupPage() {
     const params = useParams();
     const classGroupId = params.classGroupId as string;
     const { refreshData } = useSidebar();
+    
     const [subjectGroups, setSubjectGroups] = useState<SubjectGroup[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAdding, setIsAdding] = useState(false);
@@ -54,7 +68,7 @@ export default function ClassGroupPage() {
                 setNewGroupName('');
                 setIsAdding(false);
                 fetchSubjectGroups();
-                refreshData(); // Refresh sidebar
+                refreshData(); // Refresh sidebar to show new groups
             }
         } catch (error) {
             console.error('Error adding subject group:', error);
@@ -62,69 +76,84 @@ export default function ClassGroupPage() {
     };
 
     return (
-        <div className="p-8">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Subject Groups</h1>
-                <button
-                    onClick={() => setIsAdding(!isAdding)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                    <Plus className="w-4 h-4" />
-                    Add Subject Group
-                </button>
+        <div className="container max-w-6xl mx-auto py-10 px-4 sm:px-6 lg:px-8 space-y-8">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">Subject Groups</h1>
+                    <p className="text-muted-foreground mt-1">
+                        Manage subject groups (streams) for this class group.
+                    </p>
+                </div>
+                <Button onClick={() => setIsAdding(!isAdding)}>
+                    {isAdding ? <X className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+                    {isAdding ? 'Cancel' : 'Add Subject Group'}
+                </Button>
             </div>
 
+            {/* Add Form */}
             {isAdding && (
-                <div className="mb-6 p-4 bg-white rounded-lg shadow border border-gray-200">
-                    <form onSubmit={handleAddSubjectGroup} className="flex gap-4">
-                        <input
-                            type="text"
-                            value={newGroupName}
-                            onChange={(e) => setNewGroupName(e.target.value)}
-                            placeholder="Enter subject group name"
-                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                            autoFocus
-                        />
-                        <button
-                            type="submit"
-                            disabled={!newGroupName.trim()}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                            Save
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsAdding(false)}
-                            className="px-4 py-2 text-gray-600 hover:text-gray-900"
-                        >
-                            Cancel
-                        </button>
-                    </form>
-                </div>
+                <Card className="border-indigo-100 shadow-md animate-in fade-in slide-in-from-top-4">
+                    <CardHeader>
+                        <CardTitle className="text-lg">Create New Subject Group</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <form onSubmit={handleAddSubjectGroup} className="flex flex-col sm:flex-row gap-4 items-end">
+                            <div className="grid gap-2 flex-1 w-full">
+                                <Label htmlFor="groupName">Group Name</Label>
+                                <Input
+                                    id="groupName"
+                                    type="text"
+                                    value={newGroupName}
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                    placeholder="e.g. Pre-Engineering, Computer Science, Arts"
+                                    autoFocus
+                                />
+                            </div>
+                            <Button type="submit" disabled={!newGroupName.trim()}>
+                                <Save className="mr-2 h-4 w-4" /> Save Group
+                            </Button>
+                        </form>
+                    </CardContent>
+                </Card>
             )}
 
+            {/* Content List */}
             {isLoading ? (
-                <div className="text-center py-12">Loading...</div>
-            ) : subjectGroups.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                    <Layers className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900">No subject groups found</h3>
-                    <p className="text-gray-500 mt-1">Get started by adding a new subject group.</p>
+                <div className="text-center py-12 text-muted-foreground animate-pulse">
+                    Loading subject groups...
                 </div>
+            ) : subjectGroups.length === 0 ? (
+                <Card className="flex flex-col items-center justify-center p-12 text-center border-dashed">
+                    <div className="rounded-full bg-muted/50 p-4 mb-4">
+                        <Layers className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold">No subject groups found</h3>
+                    <p className="text-muted-foreground mb-6 max-w-sm">
+                        Subject groups allow you to organize classes into streams. Get started by adding a new one.
+                    </p>
+                    <Button variant="outline" onClick={() => setIsAdding(true)}>
+                        Create Subject Group
+                    </Button>
+                </Card>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {subjectGroups.map((sg) => (
-                        <div
-                            key={sg.id}
-                            className="p-4 bg-white rounded-lg shadow border border-gray-200 hover:border-indigo-500 transition-colors cursor-pointer"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-indigo-100 rounded-lg">
-                                    <Layers className="w-5 h-5 text-indigo-600" />
-                                </div>
-                                <a href={`/subject-groups/${sg.id}`} className="font-medium text-gray-900 hover:text-indigo-700">{sg.name}</a>
-                            </div>
-                        </div>
+                        <Link key={sg.id} href={`/subject-groups/${sg.id}`} className="block group">
+                            <Card className="h-full hover:shadow-md transition-all hover:border-indigo-500">
+                                <CardHeader className="flex flex-row items-center gap-4">
+                                    <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors">
+                                        <Layers className="h-6 w-6 text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <CardTitle className="text-lg group-hover:text-indigo-700 transition-colors">
+                                            {sg.name}
+                                        </CardTitle>
+                                    </div>
+                                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </CardHeader>
+                            </Card>
+                        </Link>
                     ))}
                 </div>
             )}
