@@ -5,10 +5,16 @@ export async function GET() {
     try {
         const classGroups = await prisma.classGroup.findMany({
             include: {
-                subjectGroups: {
+                classes: {
                     include: {
-                        classes: true,
+                        sections: {
+                            orderBy: { name: 'asc' }
+                        }
                     },
+                    orderBy: { name: 'asc' }
+                },
+                subjectGroups: {
+                    orderBy: { name: 'asc' }
                 },
                 campus: {
                     include: {

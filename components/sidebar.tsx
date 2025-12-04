@@ -49,6 +49,7 @@ export default function Sidebar({ user }: SidebarProps) {
     const [expandedCampuses, setExpandedCampuses] = useState<Set<string>>(new Set());
     const [expandedClassGroups, setExpandedClassGroups] = useState<Set<string>>(new Set());
     const [expandedSubjectGroups, setExpandedSubjectGroups] = useState<Set<string>>(new Set());
+    const [expandedClasses, setExpandedClasses] = useState<Set<string>>(new Set());
     
     // Module Expansion States
     const [isFinanceExpanded, setIsFinanceExpanded] = useState(false);
@@ -194,6 +195,12 @@ export default function Sidebar({ user }: SidebarProps) {
                                     <span className="text-sm font-medium">Add School</span>
                                 </Link>
                             </li>
+                            <li>
+                                <Link href="/subject-groups" className={`flex items-center gap-3 px-3 py-2 rounded-md transition-all ${isActive('/subject-groups') ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                                    <Layers className="w-4 h-4" />
+                                    <span className="text-sm font-medium">Subject Groups</span>
+                                </Link>
+                            </li>
                             {/* Render Schools Loop Here */}
                             {schools.map((school) => {
                                 const isSchoolExpanded = expandedSchools.has(school.id);
@@ -208,7 +215,7 @@ export default function Sidebar({ user }: SidebarProps) {
                                                 <span className="truncate">{school.name}</span>
                                             </Link>
                                         </div>
-                                        {/* Nested Logic for Campuses -> Class Groups -> Subject Groups -> Classes */}
+                                        {/* Nested Logic for Campuses -> Class Groups -> Classes -> Sections */}
                                         {isSchoolExpanded && (
                                             <ul className="pl-4 space-y-1 border-l border-gray-800 ml-2.5">
                                                 {school.campuses.map((campus) => {
@@ -228,11 +235,43 @@ export default function Sidebar({ user }: SidebarProps) {
                                                             {isCampusExpanded && (
                                                                 <ul className="pl-4 space-y-1 border-l border-gray-800 ml-2.5">
                                                                     {campusClassGroups.map(cg => (
-                                                                        <li key={cg.id}>
+                                                                        <li key={cg.id} className="space-y-1">
                                                                             <Link href={`/class-groups/${cg.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-white text-sm">
-                                                                                <Users className="w-3.5 h-3.5 text-yellow-400" />
+                                                                                <Layers className="w-3.5 h-3.5 text-yellow-400" />
                                                                                 <span className="truncate">{cg.name}</span>
                                                                             </Link>
+                                                                            {(cg.classes && cg.classes.length > 0) && (
+                                                                                <ul className="pl-4 space-y-1 border-l border-gray-800 ml-2.5">
+                                                                                    {cg.classes.map(cls => {
+                                                                                        const isClassExpanded = expandedClasses.has(cls.id);
+                                                                                        return (
+                                                                                            <li key={cls.id}>
+                                                                                                <div className="flex items-center gap-1">
+                                                                                                    <button onClick={() => toggle(cls.id, expandedClasses, setExpandedClasses)} className={`p-1 hover:bg-gray-800 rounded text-gray-400 hover:text-white ${!(cls.sections && cls.sections.length) ? 'opacity-0 pointer-events-none' : ''}`}>
+                                                                                                        {isClassExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                                                                                    </button>
+                                                                                                    <Link href={`/classes/${cls.id}`} className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-white text-sm">
+                                                                                                        <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                                                                                                        <span className="truncate">{cls.name}</span>
+                                                                                                    </Link>
+                                                                                                </div>
+                                                                                                {isClassExpanded && (cls.sections && cls.sections.length > 0) && (
+                                                                                                    <ul className="pl-4 space-y-1 border-l border-gray-800 ml-2.5">
+                                                                                                        {cls.sections.map(sec => (
+                                                                                                            <li key={sec.id}>
+                                                                                                                <Link href={`/classes/${cls.id}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-white text-sm">
+                                                                                                                    <Users className="w-3.5 h-3.5 text-green-400" />
+                                                                                                                    <span className="truncate">{sec.name}</span>
+                                                                                                                </Link>
+                                                                                                            </li>
+                                                                                                        ))}
+                                                                                                    </ul>
+                                                                                                )}
+                                                                                            </li>
+                                                                                        );
+                                                                                    })}
+                                                                                </ul>
+                                                                            )}
                                                                         </li>
                                                                     ))}
                                                                 </ul>

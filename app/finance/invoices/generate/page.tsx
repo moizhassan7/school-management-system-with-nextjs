@@ -42,15 +42,13 @@ type GenerateValues = z.infer<typeof generateSchema>;
 
 export default function GenerateInvoicesPage() {
     const router = useRouter();
-    const { schools, classGroups } = useSidebar(); // Assuming you updated sidebar context to fetch these
+    const { schools, classGroups } = useSidebar();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [filteredClasses, setFilteredClasses] = useState<any[]>([]);
 
     // Simple hack to flatten classes from classGroups for the dropdown
     const allClasses = classGroups.flatMap(cg => 
-        cg.subjectGroups.flatMap(sg => 
-            sg.classes.map(c => ({ ...c, classGroupId: cg.id }))
-        )
+        (cg.classes || []).map(c => ({ ...c, classGroupId: cg.id }))
     );
 
     const form = useForm<GenerateValues>({

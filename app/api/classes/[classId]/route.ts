@@ -10,12 +10,10 @@ export async function GET(
     const classData = await prisma.class.findUnique({
       where: { id: classId },
       include: {
-        subjectGroup: {
+        classGroup: {
           include: {
-            classGroup: {
-              include: {
-                campus: true
-              }
+            campus: {
+              include: { school: true }
             }
           }
         }

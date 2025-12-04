@@ -63,9 +63,7 @@ export default function FinanceConfigPage() {
   };
 
   // Flatten classes for dropdown
-  const allClasses = classGroups.flatMap(cg => 
-    cg.subjectGroups.flatMap(sg => sg.classes)
-  );
+  const allClasses = classGroups.flatMap(cg => cg.classes || []);
 
   return (
     <div className="container mx-auto py-10 px-4">

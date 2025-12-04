@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Search, UserCheck, UserPlus, X, Check, ChevronsUpDown } from 'lucide-react';
+import { Loader2, Search, UserCheck, UserPlus, X, Check, Building2, Users, Layers, BookOpen } from 'lucide-react';
 import { format } from "date-fns";
 
 import { Button } from '@/components/ui/button';
@@ -30,35 +30,40 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 
-// --- Zod Schema ---
+// --- 1. Zod Validation Schema ---
 const studentFormSchema = z.object({
-    // 1. User General Info
+    // User Account
     name: z.string().min(1, 'Full name is required'),
     email: z.string().email('Invalid email address'),
     password: z.string().min(6, 'Password must be at least 6 characters'),
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']),
     phone: z.string().optional(),
     address: z.string().optional(),
+    
+    // Hierarchy (Helpers for filtering)
     schoolId: z.string().min(1, 'School is required'),
-
-    // 2. Student Record Info
+    campusId: z.string().min(1, 'Campus is required'),
+    classGroupId: z.string().min(1, 'Class Group is required'),
+    
+    // Academic Assignment
+    classId: z.string().min(1, 'Class is required'),
+    sectionId: z.string().optional(), // Optional initially
+    subjectGroupId: z.string().optional(), // Optional (Student might not have a stream yet)
+    
+    // Student Specifics
     admissionNumber: z.string().min(1, 'Admission number is required'),
+    rollNumber: z.string().optional(),
     admissionDate: z.string().min(1, 'Admission date is required'),
     
-    // 3. Placement (Hierarchy)
-    classGroupId: z.string().min(1, 'Class Group is required'),
-    classId: z.string().min(1, 'Class is required'),
-    sectionId: z.string().optional(), // Optional, as a class might not have sections yet
-
-    // 4. Academic Session
+    // Session
     startYear: z.string().regex(/^\d{4}$/, 'Must be a 4-digit year'),
     stopYear: z.string().regex(/^\d{4}$/, 'Must be a 4-digit year'),
 
-    // 5. Parent Logic
+    // Parent Logic
     parentMode: z.enum(['LINK', 'CREATE']),
     selectedParentId: z.string().optional(),
     
-    // 6. New Parent Details (Used only if parentMode === 'CREATE')
+    // New Parent Details
     parentName: z.string().optional(),
     parentEmail: z.string().email().optional().or(z.literal('')),
     parentPhone: z.string().optional(),
@@ -69,139 +74,154 @@ const studentFormSchema = z.object({
 
 type FormValues = z.infer<typeof studentFormSchema>;
 
-// --- Interfaces ---
-interface SchoolOption { id: string; name: string; }
-interface ClassGroupOption { 
+// --- 2. Types ---
+interface School { id: string; name: string; }
+interface Campus { id: string; name: string; schoolId: string; }
+interface ClassGroup { 
     id: string; 
     name: string; 
-    subjectGroups: { classes: { id: string; name: string }[] }[] 
+    campusId: string;
+    // Relations included in API response
+    campus?: { schoolId: string; name: string };
+    classes?: { id: string; name: string }[];
+    subjectGroups?: { id: string; name: string }[];
 }
-interface ClassOption { id: string; name: string; classGroupId: string; }
-interface SectionOption { id: string; name: string; }
+interface Section { id: string; name: string; }
 
 export default function StudentForm() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // --- Data States ---
-    const [schools, setSchools] = useState<SchoolOption[]>([]);
-    const [classGroups, setClassGroups] = useState<ClassGroupOption[]>([]);
-    const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
-    const [filteredClasses, setFilteredClasses] = useState<ClassOption[]>([]);
-    const [sections, setSections] = useState<SectionOption[]>([]);
+    // --- 3. Data States ---
+    const [schools, setSchools] = useState<School[]>([]);
+    const [rawClassGroups, setRawClassGroups] = useState<ClassGroup[]>([]);
+    
+    // Filtered Options based on selection
+    const [availableCampuses, setAvailableCampuses] = useState<Campus[]>([]);
+    const [availableGroups, setAvailableGroups] = useState<ClassGroup[]>([]);
+    const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
+    const [availableStreams, setAvailableStreams] = useState<{ id: string; name: string }[]>([]);
+    const [availableSections, setAvailableSections] = useState<Section[]>([]);
 
-    // --- Parent Search States ---
+    // Parent Search
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [selectedParent, setSelectedParent] = useState<any>(null);
 
-    // --- Form Initialization ---
+    // --- 4. Form Init ---
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
         defaultValues: {
-            name: '', email: '', password: '', gender: 'UNSPECIFIED',
-            phone: '', address: '', schoolId: '',
-            admissionNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
-            classGroupId: '', classId: '', sectionId: '',
+            name: '', email: '', password: '', gender: 'UNSPECIFIED', phone: '', address: '',
+            schoolId: '', campusId: '', classGroupId: '', classId: '', sectionId: '', subjectGroupId: '',
+            admissionNumber: '', rollNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
             startYear: new Date().getFullYear().toString(),
             stopYear: (new Date().getFullYear() + 1).toString(),
-            parentMode: 'CREATE',
-            relationship: 'FATHER',
+            parentMode: 'CREATE', relationship: 'FATHER',
             parentName: '', parentEmail: '', parentPhone: '', parentCnic: '', parentOccupation: ''
         },
     });
 
-    // --- Watchers for Hierarchy ---
-    const selectedClassGroup = form.watch('classGroupId');
+    // Watchers for Filtering
+    const selectedSchool = form.watch('schoolId');
+    const selectedCampus = form.watch('campusId');
+    const selectedGroup = form.watch('classGroupId');
     const selectedClass = form.watch('classId');
 
-    // --- Effects ---
+    // --- 5. Logic & Effects ---
 
-    // 1. Initial Data Fetch
+    // Load Initial Data (Schools & All Groups)
     useEffect(() => {
-        const loadInitialData = async () => {
+        const loadData = async () => {
             try {
-                const [schoolsRes, groupsRes] = await Promise.all([
+                const [schoolRes, groupRes] = await Promise.all([
                     fetch('/api/schools'),
-                    fetch('/api/class-groups')
+                    fetch('/api/class-groups') // This MUST return full hierarchy (classes, subjectGroups, campus)
                 ]);
-                
-                if (schoolsRes.ok) setSchools(await schoolsRes.json());
-                
-                if (groupsRes.ok) {
-                    const groupsData: ClassGroupOption[] = await groupsRes.json();
-                    setClassGroups(groupsData);
-                    
-                    // Flatten classes for easier filtering
-                    const flatClasses: ClassOption[] = [];
-                    groupsData.forEach(g => {
-                        g.subjectGroups.forEach(sg => {
-                            sg.classes.forEach(c => {
-                                flatClasses.push({ id: c.id, name: c.name, classGroupId: g.id });
-                            });
-                        });
-                    });
-                    setAllClasses(flatClasses);
-                }
-            } catch (error) {
-                console.error("Failed to load initial data", error);
-            }
+                if(schoolRes.ok) setSchools(await schoolRes.json());
+                if(groupRes.ok) setRawClassGroups(await groupRes.json());
+            } catch(e) { console.error("Data load failed", e); }
         };
-        loadInitialData();
+        loadData();
     }, []);
 
-    // 2. Filter Classes when Class Group changes
+    // Filter Campuses when School Changes
     useEffect(() => {
-        if (selectedClassGroup) {
-            const filtered = allClasses.filter(c => c.classGroupId === selectedClassGroup);
-            setFilteredClasses(filtered);
-            // Reset dependent fields
-            if (!filtered.find(c => c.id === form.getValues('classId'))) {
-                form.setValue('classId', '');
-                form.setValue('sectionId', '');
-            }
-        } else {
-            setFilteredClasses([]);
+        if (!selectedSchool) {
+            setAvailableCampuses([]);
+            return;
         }
-    }, [selectedClassGroup, allClasses, form]);
+        // Extract unique campuses from the raw class groups that match the school
+        // Or if you have a separate /campuses API, use that. 
+        // Here we derive it from the classGroups data structure for efficiency if populated.
+        // Assuming rawClassGroups includes `campus: { id, name, schoolId }`
+        const campusMap = new Map();
+        rawClassGroups.forEach(g => {
+            if (g.campus && g.campus.schoolId === selectedSchool) {
+                campusMap.set(g.campusId, { id: g.campusId, name: g.campus.name, schoolId: g.campus.schoolId });
+            }
+        });
+        setAvailableCampuses(Array.from(campusMap.values()));
+        
+        // Reset downstream
+        form.setValue('campusId', '');
+    }, [selectedSchool, rawClassGroups, form]);
 
-    // 3. Fetch Sections when Class changes
+    // Filter Class Groups when Campus Changes
     useEffect(() => {
-        const fetchSections = async () => {
-            if (!selectedClass) {
-                setSections([]);
-                return;
-            }
-            try {
-                const res = await fetch(`/api/classes/${selectedClass}/sections`);
-                if (res.ok) {
-                    setSections(await res.json());
-                }
-            } catch (error) {
-                console.error("Failed to load sections", error);
-            }
-        };
-        fetchSections();
-    }, [selectedClass]);
+        if (!selectedCampus) {
+            setAvailableGroups([]);
+            return;
+        }
+        const groups = rawClassGroups.filter(g => g.campusId === selectedCampus);
+        setAvailableGroups(groups);
+        form.setValue('classGroupId', '');
+    }, [selectedCampus, rawClassGroups, form]);
 
-    // --- Parent Search Logic ---
+    // Filter Classes & Streams when Group Changes
+    useEffect(() => {
+        if (!selectedGroup) {
+            setAvailableClasses([]);
+            setAvailableStreams([]);
+            return;
+        }
+        const group = rawClassGroups.find(g => g.id === selectedGroup);
+        if (group) {
+            setAvailableClasses(group.classes || []);
+            setAvailableStreams(group.subjectGroups || []);
+        }
+        form.setValue('classId', '');
+        form.setValue('subjectGroupId', '');
+    }, [selectedGroup, rawClassGroups, form]);
+
+    // Fetch Sections when Class Changes
+    useEffect(() => {
+        if (!selectedClass) {
+            setAvailableSections([]);
+            form.setValue('sectionId', '');
+            return;
+        }
+        fetch(`/api/classes/${selectedClass}/sections`)
+            .then(res => res.json())
+            .then(setAvailableSections)
+            .catch(console.error);
+    }, [selectedClass, form]);
+
+
+    // --- 6. Parent Logic ---
     const handleSearchParent = async () => {
         if (!searchQuery || searchQuery.length < 3) return;
         setIsSearching(true);
         try {
             const res = await fetch(`/api/parents/search?q=${searchQuery}`);
-            if (res.ok) {
-                setSearchResults(await res.json());
-            }
-        } finally {
-            setIsSearching(false);
-        }
+            if (res.ok) setSearchResults(await res.json());
+        } finally { setIsSearching(false); }
     };
 
     const selectParent = (parent: any) => {
         setSelectedParent(parent);
-        form.setValue('selectedParentId', parent.parentRecord.id); // Assuming the search returns parentRecord.id logic
+        form.setValue('selectedParentId', parent.id); // ParentRecord ID
         form.setValue('parentMode', 'LINK');
         setSearchResults([]); 
     };
@@ -212,12 +232,12 @@ export default function StudentForm() {
         form.setValue('parentMode', 'CREATE');
     };
 
-    // --- Submit Logic ---
+    // --- 7. Submit Handler ---
     const onSubmit = async (data: FormValues) => {
         setIsSubmitting(true);
         try {
-            // Step 1: Create the Student (User + StudentRecord)
-            const studentPayload = {
+            // Construct API Payload
+            const payload = {
                 name: data.name,
                 email: data.email,
                 password: data.password,
@@ -227,70 +247,42 @@ export default function StudentForm() {
                 address: data.address,
                 student: {
                     admissionNumber: data.admissionNumber,
+                    rollNumber: data.rollNumber || undefined, // NEW
                     admissionDate: data.admissionDate,
                     classId: data.classId,
                     sectionId: data.sectionId || undefined,
-                    academicYear: { 
-                        startYear: data.startYear, 
-                        stopYear: data.stopYear 
-                    }
+                    subjectGroupId: data.subjectGroupId || undefined, // NEW
+                    academicYear: { startYear: data.startYear, stopYear: data.stopYear }
                 }
             };
 
-            const studentRes = await fetch('/api/users', {
+            // Create Student
+            const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(studentPayload),
+                body: JSON.stringify(payload),
             });
 
-            if (!studentRes.ok) {
-                const err = await studentRes.json();
-                throw new Error(err.error || 'Failed to create student');
-            }
+            if (!res.ok) throw new Error((await res.json()).error || 'Creation failed');
+            const studentUser = await res.json();
+            const studentRecordId = studentUser.studentRecord?.id;
 
-            const newStudent = await studentRes.json();
-            // Important: We need the ID of the created StudentRecord, not just the User ID.
-            // The /api/users route should ideally return the included studentRecord.
-            // Assuming your backend returns the user object with the relation, 
-            // you might need to fetch the student record ID differently if not returned.
-            // For this code, let's assume the API was updated or returns { ...user, studentRecord: { id: ... } }
-            // If strictly using your current API, you might need a secondary lookup if the ID isn't in the response.
-            // *Correction*: Your User POST route returns the user object. Prisma create include logic is needed there.
-            // Let's assume we get `newStudent.studentRecord.id`.
-            
-            // If the response doesn't have it, we might fail here. 
-            // *Quick Fix Recommendation*: Ensure /api/users POST includes `studentRecord: true` in the response.
-            const studentRecordId = newStudent.studentRecord?.id; 
-
-            if (!studentRecordId) throw new Error("Created user but failed to retrieve student ID");
-
-            // Step 2: Handle Parent Association
+            // Handle Parent
             if (data.parentMode === 'LINK' && data.selectedParentId) {
-                // Link to existing parent
                 await fetch(`/api/parents/${data.selectedParentId}/students`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        studentId: studentRecordId,
-                        relationship: data.relationship
-                    }),
+                    body: JSON.stringify({ studentId: studentRecordId, relationship: data.relationship }),
                 });
             } else {
-                // Create new parent and link
                 await fetch('/api/parents', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name: data.parentName,
-                        email: data.parentEmail,
-                        password: 'password123', // Default or generated
-                        phone: data.parentPhone,
-                        address: data.address, // Inherit address
-                        schoolId: data.schoolId,
-                        occupation: data.parentOccupation,
-                        cnic: data.parentCnic,
-                        studentId: studentRecordId, // Link immediately
-                        relationship: data.relationship
+                        name: data.parentName, email: data.parentEmail, password: 'password123',
+                        phone: data.parentPhone, address: data.address, schoolId: data.schoolId,
+                        occupation: data.parentOccupation, cnic: data.parentCnic,
+                        studentId: studentRecordId, relationship: data.relationship
                     }),
                 });
             }
@@ -299,7 +291,7 @@ export default function StudentForm() {
             router.refresh();
         } catch (error) {
             console.error(error);
-            form.setError('root', { message: error instanceof Error ? error.message : 'An error occurred' });
+            form.setError('root', { message: error instanceof Error ? error.message : 'Error occurred' });
         } finally {
             setIsSubmitting(false);
         }
@@ -311,137 +303,56 @@ export default function StudentForm() {
                 
                 {/* Global Error */}
                 {form.formState.errors.root && (
-                    <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md border border-destructive/20">
+                    <div className="bg-destructive/15 text-destructive text-sm p-4 rounded-md border border-destructive/20">
                         {form.formState.errors.root.message}
                     </div>
                 )}
 
-                {/* 1. STUDENT PERSONAL INFO */}
+                {/* 1. ACADEMIC PLACEMENT (Hierarchy) */}
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Personal Information</CardTitle>
-                        <CardDescription>Basic details for the student account.</CardDescription>
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5 text-indigo-600" />
+                            <CardTitle>School & Class Placement</CardTitle>
+                        </div>
+                        <CardDescription>Assign the student to their campus and class level.</CardDescription>
                     </CardHeader>
-                    <CardContent className="grid gap-6 md:grid-cols-2">
-                        <FormField control={form.control} name="name" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Full Name</FormLabel>
-                                <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-                        
-                        <FormField control={form.control} name="gender" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Gender</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl>
-                                        <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="MALE">Male</SelectItem>
-                                        <SelectItem value="FEMALE">Female</SelectItem>
-                                        <SelectItem value="OTHER">Other</SelectItem>
-                                        <SelectItem value="UNSPECIFIED">Unspecified</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-
-                        <FormField control={form.control} name="email" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Email</FormLabel>
-                                <FormControl><Input type="email" placeholder="student@school.com" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-
-                        <FormField control={form.control} name="password" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Password</FormLabel>
-                                <FormControl><Input type="password" {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-
-                        <FormField control={form.control} name="phone" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Phone (Optional)</FormLabel>
-                                <FormControl><Input placeholder="+1 234..." {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-
-                        <FormField control={form.control} name="address" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Address (Optional)</FormLabel>
-                                <FormControl><Input placeholder="123 St..." {...field} /></FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-                    </CardContent>
-                </Card>
-
-                {/* 2. ACADEMIC & PLACEMENT */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Academic Placement</CardTitle>
-                        <CardDescription>Enrollment details and class assignment.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid gap-6 md:grid-cols-2">
+                    <CardContent className="grid gap-6">
+                        {/* School & Campus */}
+                        <div className="grid md:grid-cols-2 gap-6">
                             <FormField control={form.control} name="schoolId" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>School</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Select School" /></SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {schools.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Select School" /></SelectTrigger></FormControl>
+                                        <SelectContent>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField control={form.control} name="admissionNumber" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Admission No</FormLabel>
-                                        <FormControl><Input placeholder="ADM-001" {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                                
-                                <FormField control={form.control} name="admissionDate" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Admission Date</FormLabel>
-                                        <FormControl><Input type="date" {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )} />
-                            </div>
+                            <FormField control={form.control} name="campusId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Campus</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSchool}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Select Campus" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableCampuses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
                         </div>
 
                         <Separator />
 
-                        <div className="grid gap-6 md:grid-cols-3">
+                        {/* Class Group & Details */}
+                        <div className="grid md:grid-cols-4 gap-4">
                             <FormField control={form.control} name="classGroupId" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Class Group</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Select Group" /></SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {classGroups.map(cg => (
-                                                <SelectItem key={cg.id} value={cg.id}>{cg.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedCampus}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Middle Section" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
@@ -450,15 +361,9 @@ export default function StudentForm() {
                             <FormField control={form.control} name="classId" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Class</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedClassGroup}>
-                                        <FormControl>
-                                            <SelectTrigger><SelectValue placeholder="Select Class" /></SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {filteredClasses.map(c => (
-                                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableClasses.length === 0}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. 9th" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
@@ -467,35 +372,56 @@ export default function StudentForm() {
                             <FormField control={form.control} name="sectionId" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Section</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedClass || sections.length === 0}>
-                                        <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder={sections.length === 0 ? "No Sections" : "Select Section"} />
-                                            </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                            {sections.map(s => (
-                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableSections.length === 0}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Blue" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableSections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+
+                            <FormField control={form.control} name="subjectGroupId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Stream (Subject Group)</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableStreams.length === 0}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Science" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableStreams.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormDescription className="text-[10px]">Optional for junior classes</FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )} />
                         </div>
 
-                        <div className="grid gap-6 md:grid-cols-2 bg-slate-50 p-4 rounded-md border">
+                        {/* Session & Identifiers */}
+                        <div className="grid md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border">
+                            <FormField control={form.control} name="admissionNumber" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Admission #</FormLabel>
+                                    <FormControl><Input placeholder="ADM-001" {...field} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            
+                            <FormField control={form.control} name="rollNumber" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Roll No</FormLabel>
+                                    <FormControl><Input placeholder="01" {...field} /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+
                             <FormField control={form.control} name="startYear" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Session Start Year</FormLabel>
-                                    <FormControl><Input {...field} maxLength={4} /></FormControl>
+                                    <FormLabel>Session Start</FormLabel>
+                                    <FormControl><Input maxLength={4} {...field} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )} />
                             <FormField control={form.control} name="stopYear" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Session End Year</FormLabel>
-                                    <FormControl><Input {...field} maxLength={4} /></FormControl>
+                                    <FormLabel>Session End</FormLabel>
+                                    <FormControl><Input maxLength={4} {...field} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )} />
@@ -503,18 +429,65 @@ export default function StudentForm() {
                     </CardContent>
                 </Card>
 
+                {/* 2. PERSONAL INFO */}
+                <Card>
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-indigo-600" />
+                            <CardTitle>Personal Details</CardTitle>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-6 md:grid-cols-2">
+                        <FormField control={form.control} name="name" render={({ field }) => (
+                            <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="gender" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Gender</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="MALE">Male</SelectItem>
+                                        <SelectItem value="FEMALE">Female</SelectItem>
+                                        <SelectItem value="OTHER">Other</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                        <FormField control={form.control} name="email" render={({ field }) => (
+                            <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="password" render={({ field }) => (
+                            <FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="phone" render={({ field }) => (
+                            <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="address" render={({ field }) => (
+                            <FormItem><FormLabel>Address</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                        <FormField control={form.control} name="admissionDate" render={({ field }) => (
+                            <FormItem><FormLabel>Admission Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    </CardContent>
+                </Card>
+
                 {/* 3. PARENT / GUARDIAN */}
-                <Card className="border-blue-100 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="flex justify-between items-center text-blue-900">
-                            Parent / Guardian
-                            {selectedParent && <Badge variant="secondary" className="bg-blue-100 text-blue-700">Linked</Badge>}
-                        </CardTitle>
-                        <CardDescription>Link an existing parent or add a new one.</CardDescription>
+                <Card className="border-indigo-100 shadow-sm">
+                    <CardHeader className="pb-4">
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                                <UserPlus className="h-5 w-5 text-indigo-600" />
+                                <CardTitle>Parent Information</CardTitle>
+                            </div>
+                            {selectedParent && <Badge variant="secondary" className="bg-green-100 text-green-700">Existing Parent Linked</Badge>}
+                        </div>
+                        <CardDescription>Link to an existing parent (siblings) or register a new one.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         
-                        {/* Search existing parent */}
+                        {/* Search Area */}
                         {!selectedParent && (
                             <div className="bg-slate-50 p-4 rounded-lg border">
                                 <FormLabel className="mb-2 block font-semibold text-slate-700">Link Existing Parent</FormLabel>
@@ -533,7 +506,7 @@ export default function StudentForm() {
                                 {searchResults.length > 0 && (
                                     <div className="mt-3 space-y-2">
                                         {searchResults.map((p) => (
-                                            <div key={p.id} className="flex items-center justify-between p-3 bg-white border rounded shadow-sm hover:border-blue-300 transition-colors">
+                                            <div key={p.id} className="flex items-center justify-between p-3 bg-white border rounded shadow-sm hover:border-indigo-300 transition-colors">
                                                 <div>
                                                     <p className="font-medium text-slate-900">{p.user.name}</p>
                                                     <p className="text-xs text-muted-foreground">{p.cnic || 'No CNIC'} • {p.user.phone}</p>
@@ -548,13 +521,11 @@ export default function StudentForm() {
                             </div>
                         )}
 
-                        {/* Selected Parent Display */}
+                        {/* Selected Parent View */}
                         {selectedParent && (
                             <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
                                 <div className="flex items-center gap-3">
-                                    <div className="bg-green-100 p-2 rounded-full">
-                                        <UserCheck className="h-5 w-5 text-green-700" />
-                                    </div>
+                                    <div className="bg-green-100 p-2 rounded-full"><UserCheck className="h-5 w-5 text-green-700" /></div>
                                     <div>
                                         <p className="font-bold text-green-800">{selectedParent.user.name}</p>
                                         <p className="text-sm text-green-600">CNIC: {selectedParent.cnic}</p>
@@ -565,8 +536,6 @@ export default function StudentForm() {
                                 </Button>
                             </div>
                         )}
-
-                        <Separator />
 
                         <div className="grid md:grid-cols-2 gap-6">
                             <FormField control={form.control} name="relationship" render={({ field }) => (
@@ -588,11 +557,8 @@ export default function StudentForm() {
 
                         {/* Create New Parent Fields */}
                         {!selectedParent && (
-                            <div className="animate-in fade-in slide-in-from-top-4 space-y-4">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <UserPlus className="h-4 w-4 text-blue-600" />
-                                    <h4 className="font-semibold text-sm text-blue-600 uppercase tracking-wide">New Parent Details</h4>
-                                </div>
+                            <div className="animate-in fade-in slide-in-from-top-4 space-y-4 pt-4 border-t">
+                                <h4 className="font-semibold text-sm text-indigo-600 uppercase tracking-wide">New Parent Details</h4>
                                 <div className="grid md:grid-cols-2 gap-4">
                                     <FormField control={form.control} name="parentName" render={({ field }) => (
                                         <FormItem><FormLabel>Parent Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
@@ -615,7 +581,7 @@ export default function StudentForm() {
                     </CardContent>
                 </Card>
 
-                <div className="flex justify-end gap-4 pt-4">
+                <div className="flex justify-end gap-4 pt-4 sticky bottom-0 bg-white p-4 border-t z-10">
                     <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
                     <Button type="submit" disabled={isSubmitting} className="min-w-[150px]">
                         {isSubmitting ? (

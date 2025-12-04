@@ -7,8 +7,17 @@ export async function GET(
 ) {
   try {
     const { subjectGroupId } = await params
+    const subjectGroup = await prisma.subjectGroup.findUnique({
+      where: { id: subjectGroupId },
+      select: { classGroupId: true }
+    })
+
+    if (!subjectGroup) {
+      return NextResponse.json({ error: 'Subject group not found' }, { status: 404 })
+    }
+
     const classes = await prisma.class.findMany({
-      where: { subjectGroupId },
+      where: { classGroupId: subjectGroup.classGroupId },
       orderBy: { createdAt: 'desc' },
     })
     return NextResponse.json(classes)
@@ -36,10 +45,19 @@ export async function POST(
       )
     }
 
+    const subjectGroup = await prisma.subjectGroup.findUnique({
+      where: { id: subjectGroupId },
+      select: { classGroupId: true }
+    })
+
+    if (!subjectGroup) {
+      return NextResponse.json({ error: 'Subject group not found' }, { status: 404 })
+    }
+
     const newClass = await prisma.class.create({
       data: {
         name,
-        subjectGroupId,
+        classGroupId: subjectGroup.classGroupId,
       },
     })
 

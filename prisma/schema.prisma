@@ -71,6 +71,91 @@ model School {
   updatedAt DateTime @updatedAt
 }
 
+model ClassGroup {
+  id           String         @id @default(cuid())
+  name         String
+  description  String?
+  campusId     String
+  campus       Campus         @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  
+  classes      Class[]
+  subjectGroups SubjectGroup[]
+  
+  // --- FIX ADDED HERE ---
+  // Link to the grading system (One GradeSystem -> Many ClassGroups)
+  gradeSystemId String?       
+  gradeSystem   GradeSystem?  @relation(fields: [gradeSystemId], references: [id])
+  // ----------------------
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model SubjectGroup {
+  id            String         @id @default(cuid())
+  name          String
+  description   String?
+  classGroupId  String
+  classGroup    ClassGroup     @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  
+  subjects      Subject[]
+  
+  // NEW: Linked to Students, not Classes
+  students      StudentRecord[]
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Class {
+  id             String        @id @default(cuid())
+  name           String        // e.g. "9-A"
+  
+  classGroupId   String
+  classGroup     ClassGroup    @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  
+  sections       Section[]
+  studentRecords StudentRecord[]
+  yearRecords    AcademicYearStudentRecord[]
+  feeStructures  FeeStructure[]
+  
+  // --- FIX ADDED HERE ---
+  // Opposite relations for the Examination module
+  examConfigurations ExamConfiguration[]
+  examResults        ExamResult[]
+  // ----------------------
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model StudentRecord {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  admissionNumber  String?
+  rollNumber       String?  // NEW: Roll Number (Class specific)
+  
+  admissionDate    DateTime
+  
+  classId          String?
+  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  sectionId        String?
+  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  
+  // NEW: Student's chosen stream
+  subjectGroupId   String?
+  subjectGroup     SubjectGroup? @relation(fields: [subjectGroupId], references: [id])
+  
+  academicYearRecords AcademicYearStudentRecord[]
+  parents          Kinship[]
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 model Campus {
   id          String       @id @default(cuid())
   name        String
@@ -82,47 +167,6 @@ model Campus {
   classGroups ClassGroup[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-}
-
-model ClassGroup {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  campusId    String
-  campus      Campus   @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  gradeSystemId String?
-  gradeSystem GradeSystem? @relation(fields: [gradeSystemId], references: [id], onDelete: SetNull)
-  subjectGroups SubjectGroup[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model SubjectGroup{
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  classGroupId String
-  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
-  subjects    Subject[]
-  classes     Class[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Class {
-  id             String       @id @default(cuid())
-  name           String
-  subjectGroupId String
-  subjectGroup   SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
-  sections       Section[]
-  studentRecords StudentRecord[]
-  yearRecords    AcademicYearStudentRecord[]
-  feeStructures  FeeStructure[] // Relation to Finance
-  examConfigurations ExamConfiguration[]
-  examResults    ExamResult[]
-
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
 }
 
 model Section {
@@ -168,25 +212,6 @@ model User {
   updatedAt         DateTime @updatedAt
   role Role @default(STUDENT)
   @@index([schoolId])
-}
-
-model StudentRecord {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  admissionNumber  String?
-  admissionDate    DateTime
-  classId          String?
-  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
-  sectionId        String?
-  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  
-  academicYearRecords AcademicYearStudentRecord[]
-  parents          Kinship[]
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 }
 
 model ParentRecord {

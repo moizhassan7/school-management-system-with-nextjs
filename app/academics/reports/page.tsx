@@ -36,9 +36,7 @@ export default function ReportsPage() {
         }
     }, [schools]);
 
-    const allClasses = classGroups.flatMap(cg => 
-        cg.subjectGroups.flatMap(sg => sg.classes)
-    );
+    const allClasses = classGroups.flatMap(cg => cg.classes || []);
 
     const handleGenerate = async () => {
         if (!selectedExamId || !selectedClassId) return;

@@ -23,12 +23,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <SessionProvider session={session}>
           <SidebarProvider>
             <div className="flex">
-              {/* Only show sidebar if user is actually logged in */}
-              {session?.user && <Sidebar user={user} />}
+              <Sidebar user={user} />
               <main className="flex-1">
                 {children}
               </main>

@@ -85,10 +85,15 @@ export default function ClassGroupPage() {
                         Manage subject groups (streams) for this class group.
                     </p>
                 </div>
-                <Button onClick={() => setIsAdding(!isAdding)}>
-                    {isAdding ? <X className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
-                    {isAdding ? 'Cancel' : 'Add Subject Group'}
-                </Button>
+                <div className="flex gap-2">
+                    <Link href={`/class-groups/${classGroupId}/classes`}>
+                        <Button variant="outline">Manage Classes</Button>
+                    </Link>
+                    <Button onClick={() => setIsAdding(!isAdding)}>
+                        {isAdding ? <X className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
+                        {isAdding ? 'Cancel' : 'Add Subject Group'}
+                    </Button>
+                </div>
             </div>
 
             {/* Add Form */}

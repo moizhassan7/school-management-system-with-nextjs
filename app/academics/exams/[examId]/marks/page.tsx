@@ -20,7 +20,7 @@ export default function MarksEntryPage({ params }: { params: Promise<{ examId: s
   const [students, setStudents] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  const allClasses = classGroups.flatMap(cg => cg.subjectGroups.flatMap(sg => sg.classes));
+  const allClasses = classGroups.flatMap(cg => cg.classes || []);
 
   // Load Subjects when Class selected
   useEffect(() => {

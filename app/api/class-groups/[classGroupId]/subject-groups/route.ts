@@ -9,7 +9,6 @@ export async function GET(
     const { classGroupId } = await params
     const groups = await prisma.subjectGroup.findMany({
       where: { classGroupId },
-      include: { classes: true },
       orderBy: { createdAt: 'desc' },
     })
     return NextResponse.json(groups)

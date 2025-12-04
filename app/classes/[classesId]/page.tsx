@@ -26,20 +26,18 @@ interface Section {
 interface ClassDetails {
     id: string;
     name: string;
-    subjectGroup: {
+    classGroup: {
         id: string;
         name: string;
-        classGroup: {
+        campus: {
             name: string;
-            campus: {
-                name: string;
-            }
-        }
+        };
     };
 }
 
-export default function SectionsPage({ params }: { params: Promise<{ classId: string }> }) {
-    const { classId } = use(params);
+export default function SectionsPage({ params }: { params: Promise<{ classesId: string }> }) {
+    const { classesId } = use(params);
+    const classId = classesId;
     
     const [sections, setSections] = useState<Section[]>([]);
     const [classDetails, setClassDetails] = useState<ClassDetails | null>(null);
@@ -116,10 +114,10 @@ export default function SectionsPage({ params }: { params: Promise<{ classId: st
         <div className="container max-w-6xl mx-auto py-10 px-4 space-y-8">
             {/* Header with Breadcrumbs Info */}
             <div className="flex flex-col gap-4">
-                <Link href={`/subject-groups/${classDetails?.subjectGroup.id}`}>
+                <Link href={`/class-groups/${classDetails?.classGroup.id}`}>
                     <Button variant="ghost" size="sm" className="pl-0 text-muted-foreground hover:text-foreground">
                         <ArrowLeft className="mr-2 h-4 w-4" /> 
-                        Back to {classDetails?.subjectGroup.name || 'Subject Group'}
+                        Back to {classDetails?.classGroup.name || 'Class Group'}
                     </Button>
                 </Link>
                 
@@ -130,7 +128,7 @@ export default function SectionsPage({ params }: { params: Promise<{ classId: st
                         </h1>
                         <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                             <Building className="h-3.5 w-3.5" />
-                            {classDetails?.subjectGroup.classGroup.campus.name} • {classDetails?.subjectGroup.classGroup.name}
+                            {classDetails?.classGroup.campus.name} • {classDetails?.classGroup.name}
                         </p>
                     </div>
                     <Button onClick={() => setIsAdding(!isAdding)}>

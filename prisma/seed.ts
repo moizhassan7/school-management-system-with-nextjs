@@ -17,10 +17,10 @@ async function main() {
     update: {},
     create: {
       id: 'default-school',
-      name: 'Springfield High School',
-      initials: 'SHS',
-      address: '742 Evergreen Terrace',
-      email: 'info@springfield.edu',
+      name: 'Harvard High School',
+      initials: 'HHS',
+      address: '100 Harvard St, Cambridge, MA 02138',
+      email: 'info@harvard.edu',
       phone: '555-0123',
     },
   });
@@ -39,27 +39,27 @@ async function main() {
     },
     {
       email: 'admin@school.com',
-      name: 'Principal Skinner',
+      name: 'Principal Harvard',
       role: Role.ADMIN,
     },
     {
       email: 'accountant@school.com',
-      name: 'Oscar Accountant',
+      name: 'Accountant',
       role: Role.ACCOUNTANT,
     },
     {
       email: 'teacher@school.com',
-      name: 'Edna Krabappel',
+      name: 'Teacher',
       role: Role.TEACHER,
     },
     {
       email: 'student@school.com',
-      name: 'Bart Simpson',
+      name: 'Student',
       role: Role.STUDENT,
     },
     {
       email: 'parent@school.com',
-      name: 'Homer Simpson',
+      name: 'Parent',
       role: Role.PARENT,
     },
   ];

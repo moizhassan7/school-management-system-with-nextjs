@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
     Plus, 
-    BookOpen, 
     ArrowLeft, 
     Save, 
     X, 
@@ -26,7 +25,6 @@ import {
 } from '@/components/ui/card';
 
 // --- Types ---
-interface ClassItem { id: string; name: string; }
 interface SubjectItem { id: string; name: string; }
 
 export default function SubjectGroupDetailPage() {
@@ -35,22 +33,16 @@ export default function SubjectGroupDetailPage() {
     const subjectGroupId = params.subjectGroupId as string;
     
     // Data State
-    const [classes, setClasses] = useState<ClassItem[]>([]);
     const [subjects, setSubjects] = useState<SubjectItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     
     // Add Forms State
-    const [isAddingClass, setIsAddingClass] = useState(false);
     const [isAddingSubject, setIsAddingSubject] = useState(false);
     const [newItemName, setNewItemName] = useState('');
 
     useEffect(() => {
         if (subjectGroupId) {
-            Promise.all([
-                fetch(`/api/subject-groups/${subjectGroupId}/classes`).then(res => res.json()),
-                fetch(`/api/subject-groups/${subjectGroupId}/subjects`).then(res => res.json())
-            ]).then(([classData, subjectData]) => {
-                setClasses(classData);
+            fetch(`/api/subject-groups/${subjectGroupId}/subjects`).then(res => res.json()).then((subjectData) => {
                 setSubjects(subjectData);
                 setIsLoading(false);
             });
@@ -58,20 +50,6 @@ export default function SubjectGroupDetailPage() {
     }, [subjectGroupId]);
 
     // --- Handlers ---
-
-    const handleAddClass = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const res = await fetch(`/api/subject-groups/${subjectGroupId}/classes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newItemName }),
-        });
-        if (res.ok) {
-            setClasses([...classes, await res.json()]);
-            setNewItemName('');
-            setIsAddingClass(false);
-        }
-    };
 
     const handleAddSubject = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -106,8 +84,8 @@ export default function SubjectGroupDetailPage() {
                 </Link>
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Manage Group</h1>
-                        <p className="text-muted-foreground">Configure classes and subjects for this stream.</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-gray-900">Manage Subject Group</h1>
+                        <p className="text-muted-foreground">Define subjects available in this stream.</p>
                     </div>
                 </div>
             </div>
@@ -115,59 +93,11 @@ export default function SubjectGroupDetailPage() {
             {isLoading ? (
                 <div className="text-center py-12 animate-pulse">Loading...</div>
             ) : (
-                <Tabs defaultValue="classes" className="w-full">
-                    <TabsList className="grid w-full max-w-md grid-cols-2">
-                        <TabsTrigger value="classes">Classes</TabsTrigger>
+                <Tabs defaultValue="subjects" className="w-full">
+                    <TabsList className="grid w-full max-w-md grid-cols-1">
                         <TabsTrigger value="subjects">Subjects</TabsTrigger>
                     </TabsList>
 
-                    {/* --- CLASSES TAB --- */}
-                    <TabsContent value="classes" className="space-y-4 mt-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-semibold">Enrolled Classes</h2>
-                            <Button onClick={() => setIsAddingClass(!isAddingClass)} size="sm">
-                                {isAddingClass ? <X className="h-4 w-4 mr-2"/> : <Plus className="h-4 w-4 mr-2"/>}
-                                {isAddingClass ? 'Cancel' : 'Add Class'}
-                            </Button>
-                        </div>
-
-                        {isAddingClass && (
-                            <Card className="border-indigo-100 shadow-sm animate-in fade-in slide-in-from-top-2">
-                                <CardContent className="pt-6">
-                                    <form onSubmit={handleAddClass} className="flex gap-4">
-                                        <Input 
-                                            placeholder="Class Name (e.g. Grade 9-A)" 
-                                            value={newItemName} 
-                                            onChange={e => setNewItemName(e.target.value)} 
-                                            autoFocus 
-                                        />
-                                        <Button type="submit">Save</Button>
-                                    </form>
-                                </CardContent>
-                            </Card>
-                        )}
-
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                            {classes.map((cls) => (
-                                <Link key={cls.id} href={`/classes/${cls.id}`}>
-                                    <Card className="hover:shadow-md transition-all cursor-pointer hover:border-indigo-300">
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium">Class</CardTitle>
-                                            <BookOpen className="h-4 w-4 text-muted-foreground" />
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold">{cls.name}</div>
-                                        </CardContent>
-                                    </Card>
-                                </Link>
-                            ))}
-                        </div>
-                        {classes.length === 0 && !isAddingClass && (
-                            <p className="text-center text-muted-foreground py-8 border border-dashed rounded-lg">No classes found.</p>
-                        )}
-                    </TabsContent>
-
-                    {/* --- SUBJECTS TAB --- */}
                     <TabsContent value="subjects" className="space-y-4 mt-6">
                         <div className="flex justify-between items-center">
                             <h2 className="text-lg font-semibold">Curriculum Subjects</h2>
@@ -229,4 +159,4 @@ export default function SubjectGroupDetailPage() {
             )}
         </div>
     );
-}   
+}

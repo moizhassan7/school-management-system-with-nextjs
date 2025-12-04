@@ -5,16 +5,17 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 export interface Class {
     id: string;
     name: string;
-    subjectGroupId: string;
+    classGroupId?: string;
+    sections?: { id: string; name: string }[];
 }
 
 export interface ClassGroup {
     id: string;
     name: string;
+    classes: Class[];
     subjectGroups: {
         id: string;
         name: string;
-        classes: Class[];
     }[];
     campusId: string;
     campus?: {

@@ -6,15 +6,17 @@ import { auth } from '@/auth'
 
 const studentSchema = z.object({
   admissionNumber: z.string().optional(),
+  rollNumber: z.string().optional(), // NEW
   admissionDate: z.string(),
   classId: z.string().optional(),
   sectionId: z.string().optional(),
+  subjectGroupId: z.string().optional(), // NEW
   academicYearId: z.string().optional(),
   academicYear: z.object({
     startYear: z.string(),
     stopYear: z.string(),
   }).optional(),
-})
+});
 
 const userSchema = z.object({
   name: z.string().min(1),
@@ -116,6 +118,8 @@ export async function POST(request: Request) {
         data: {
           userId: user.id,
           admissionNumber: s.admissionNumber || null,
+          rollNumber: s.rollNumber || null,
+          subjectGroupId: s.subjectGroupId || null,
           admissionDate: new Date(s.admissionDate),
           classId: s.classId || null,
           sectionId: s.sectionId || null,

@@ -11,10 +11,18 @@ export async function GET(
 
   if (!classId) return NextResponse.json([]);
 
-  // Get subjects for this class
+  // Get subjects available for this class via its class group's subject groups
   const classData = await prisma.class.findUnique({
     where: { id: classId },
-    include: { subjectGroup: { include: { subjects: true } } }
+    include: {
+      classGroup: {
+        include: {
+          subjectGroups: {
+            include: { subjects: true }
+          }
+        }
+      }
+    }
   });
 
   if (!classData) return NextResponse.json([]);
@@ -24,8 +32,13 @@ export async function GET(
     where: { examId, classId }
   });
 
+  // Build unique subject list across all subject groups in this class group
+  const subjects = Array.from(new Map(
+    (classData.classGroup.subjectGroups.flatMap(sg => sg.subjects) || []).map(s => [s.id, s])
+  ).values());
+
   // Merge subjects with existing config (or default)
-  const result = classData.subjectGroup.subjects.map(subject => {
+  const result = subjects.map(subject => {
     const config = configs.find(c => c.subjectId === subject.id);
     return {
       subjectId: subject.id,

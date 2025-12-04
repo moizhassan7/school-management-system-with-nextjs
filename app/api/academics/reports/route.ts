@@ -15,14 +15,11 @@ export async function GET(request: Request) {
     const classData = await prisma.class.findUnique({
       where: { id: classId },
       include: {
-        subjectGroup: {
+        classGroup: {
           include: {
-            subjects: true,
-            classGroup: {
-              // Assuming you linked GradeSystem to ClassGroup in Phase 1
-              // If not, we will fallback to simple percentage
-              // include: { gradeSystem: { include: { ranges: true } } } 
-            }
+            campus: { include: { school: true } },
+            subjectGroups: { include: { subjects: true } },
+            gradeSystem: { include: { ranges: { orderBy: { minPercent: 'desc' } } } }
           }
         }
       }
@@ -49,10 +46,10 @@ export async function GET(request: Request) {
 
     // 5. Fetch Grade System (Optional: Retrieve manually if not linked in schema yet)
     // For safety, let's fetch the first available grade system for this school if specific link is missing
-    const gradeSystem = await prisma.gradeSystem.findFirst({
-        where: { schoolId: classData.subjectGroup.classGroup.campusId /* approximation */ },
+    const gradeSystem = classData.classGroup.gradeSystem || await prisma.gradeSystem.findFirst({
+        where: { schoolId: classData.classGroup.campus.schoolId },
         include: { ranges: { orderBy: { minPercent: 'desc' } } }
-    }) || { ranges: [] }; // Fallback
+    }) || { ranges: [] };
 
     // --- PROCESSING LOGIC ---
     
@@ -60,7 +57,11 @@ export async function GET(request: Request) {
       let totalMax = 0;
       let totalObtained = 0;
       
-      const subjectResults = classData.subjectGroup.subjects.map(sub => {
+    const subjects = Array.from(new Map(
+      (classData.classGroup.subjectGroups.flatMap(sg => sg.subjects) || []).map(s => [s.id, s])
+    ).values());
+
+    const subjectResults = subjects.map(sub => {
         // Find config for max marks (default 100)
         const config = configs.find(c => c.subjectId === sub.id);
         const maxMarks = config ? config.maxMarks : 100;

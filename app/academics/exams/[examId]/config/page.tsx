@@ -19,7 +19,7 @@ export default function ExamConfigPage({ params }: { params: Promise<{ examId: s
   const [isSaving, setIsSaving] = useState(false);
 
   // Flatten classes for dropdown
-  const allClasses = classGroups.flatMap(cg => cg.subjectGroups.flatMap(sg => sg.classes));
+  const allClasses = classGroups.flatMap(cg => cg.classes || []);
 
   useEffect(() => {
     if (selectedClassId) {
