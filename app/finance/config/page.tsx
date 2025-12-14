@@ -8,23 +8,49 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSidebar } from '@/contexts/SidebarContext';
-import { Plus, Save } from 'lucide-react';
+import { Plus, Save, ArrowRight } from 'lucide-react';
 
 export default function FinanceConfigPage() {
   const { classGroups, schools } = useSidebar();
+  const [activeTab, setActiveTab] = useState("accounts");
+
+  // Data States
+  const [accountHeads, setAccountHeads] = useState<any[]>([]);
+  const [accountSubHeads, setAccountSubHeads] = useState<any[]>([]);
   const [feeHeads, setFeeHeads] = useState<any[]>([]);
-  const [newHeadName, setNewHeadName] = useState('');
   
+  // Form States
+  const [newAccountHead, setNewAccountHead] = useState('');
+  const [newSubHeadName, setNewSubHeadName] = useState('');
+  const [selectedHeadId, setSelectedHeadId] = useState('');
+  
+  const [newFeeHeadName, setNewFeeHeadName] = useState('');
+  const [selectedSubHeadId, setSelectedSubHeadId] = useState('');
+
   // Structure State
   const [selectedClassId, setSelectedClassId] = useState('');
   const [feeStructures, setFeeStructures] = useState<Record<string, number>>({});
 
-  // 1. Fetch Fee Heads
-  useEffect(() => {
+  // --- FIX IS HERE ---
+  // Flatten classes directly from ClassGroup (New Hierarchy)
+  // Ensure we safely access .classes array
+  const allClasses = classGroups.flatMap(cg => 
+    // @ts-ignore - Context types might not be updated yet, but API sends this
+    cg.classes || [] 
+  );
+  // -------------------
+
+  // --- FETCH DATA ---
+  const refreshData = () => {
+    fetch('/api/finance/account-heads').then(res => res.json()).then(setAccountHeads);
+    fetch('/api/finance/account-subheads').then(res => res.json()).then(setAccountSubHeads);
     fetch('/api/finance/fee-heads').then(res => res.json()).then(setFeeHeads);
+  };
+
+  useEffect(() => {
+    refreshData();
   }, []);
 
-  // 2. Fetch Structure when Class Selected
   useEffect(() => {
     if (!selectedClassId) return;
     fetch(`/api/finance/fee-structures?classId=${selectedClassId}`)
@@ -36,18 +62,44 @@ export default function FinanceConfigPage() {
       });
   }, [selectedClassId]);
 
-  const createFeeHead = async () => {
-    await fetch('/api/finance/fee-heads', {
+  // --- HANDLERS ---
+
+  const handleCreateAccountHead = async () => {
+    if (!newAccountHead) return;
+    await fetch('/api/finance/account-heads', {
       method: 'POST',
-      body: JSON.stringify({ name: newHeadName, schoolId: schools[0]?.id, type: 'MONTHLY' })
+      body: JSON.stringify({ name: newAccountHead, schoolId: schools[0]?.id })
     });
-    setNewHeadName('');
-    // Refresh heads...
-    fetch('/api/finance/fee-heads').then(res => res.json()).then(setFeeHeads);
+    setNewAccountHead('');
+    refreshData();
   };
 
-  const saveStructure = async () => {
-    // Loop through local state and save (in real app, use bulk upsert API)
+  const handleCreateSubHead = async () => {
+    if (!newSubHeadName || !selectedHeadId) return;
+    await fetch('/api/finance/account-subheads', {
+      method: 'POST',
+      body: JSON.stringify({ name: newSubHeadName, headId: selectedHeadId, schoolId: schools[0]?.id })
+    });
+    setNewSubHeadName('');
+    refreshData();
+  };
+
+  const handleCreateFeeHead = async () => {
+    if (!newFeeHeadName || !selectedSubHeadId) return;
+    await fetch('/api/finance/fee-heads', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        name: newFeeHeadName, 
+        schoolId: schools[0]?.id, 
+        type: 'MONTHLY',
+        accountSubHeadId: selectedSubHeadId 
+      })
+    });
+    setNewFeeHeadName('');
+    refreshData();
+  };
+
+  const handleSaveStructure = async () => {
     for (const [headId, amount] of Object.entries(feeStructures)) {
       await fetch('/api/finance/fee-structures', {
         method: 'POST',
@@ -59,51 +111,134 @@ export default function FinanceConfigPage() {
         })
       });
     }
-    alert('Saved!');
+    alert('Fee Structure Saved!');
   };
 
-  // Flatten classes for dropdown
-  const allClasses = classGroups.flatMap(cg => cg.classes || []);
-
   return (
-    <div className="container mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-6">Finance Configuration</h1>
+    <div className="container mx-auto py-10 px-4 space-y-8">
+      <h1 className="text-3xl font-bold">Finance Configuration</h1>
       
-      <Tabs defaultValue="heads">
-        <TabsList>
-          <TabsTrigger value="heads">Fee Heads</TabsTrigger>
-          <TabsTrigger value="structure">Fee Structure</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="accounts">1. Accounts Hierarchy</TabsTrigger>
+          <TabsTrigger value="feeheads">2. Fee Heads</TabsTrigger>
+          <TabsTrigger value="structure">3. Fee Structure</TabsTrigger>
         </TabsList>
 
-        {/* --- TAB 1: FEE HEADS --- */}
-        <TabsContent value="heads">
+        {/* --- TAB 1: ACCOUNTS --- */}
+        <TabsContent value="accounts" className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            
+            {/* Level 1: Account Heads */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Major Account Heads</CardTitle>
+                <CardDescription>e.g. Assets, Income, Expense</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input placeholder="Name (e.g. INCOME)" value={newAccountHead} onChange={e => setNewAccountHead(e.target.value)} />
+                  <Button onClick={handleCreateAccountHead}><Plus className="h-4 w-4"/></Button>
+                </div>
+                <div className="space-y-2">
+                  {accountHeads.map(h => (
+                    <div key={h.id} className="p-2 bg-slate-50 border rounded text-sm font-medium">
+                      {h.name}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Level 2: Subheads */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Account Subheads</CardTitle>
+                <CardDescription>e.g. Academic Fees, Transport Fees</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Parent Head</Label>
+                  <Select onValueChange={setSelectedHeadId}>
+                    <SelectTrigger><SelectValue placeholder="Select Head" /></SelectTrigger>
+                    <SelectContent>
+                      {accountHeads.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Input placeholder="Subhead Name" value={newSubHeadName} onChange={e => setNewSubHeadName(e.target.value)} />
+                  <Button onClick={handleCreateSubHead} disabled={!selectedHeadId}><Plus className="h-4 w-4"/></Button>
+                </div>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {accountSubHeads.map(sh => (
+                    <div key={sh.id} className="p-2 bg-slate-50 border rounded text-sm flex justify-between">
+                      <span>{sh.name}</span>
+                      <span className="text-xs text-muted-foreground bg-white px-1 rounded border">{sh.head?.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setActiveTab("feeheads")}>Next: Create Fee Heads <ArrowRight className="ml-2 h-4 w-4"/></Button>
+          </div>
+        </TabsContent>
+
+        {/* --- TAB 2: FEE HEADS --- */}
+        <TabsContent value="feeheads">
           <Card>
-            <CardHeader><CardTitle>Manage Fee Types</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input placeholder="New Fee Head (e.g. Lab Charges)" value={newHeadName} onChange={e => setNewHeadName(e.target.value)} />
-                <Button onClick={createFeeHead}><Plus className="mr-2 h-4 w-4"/> Add</Button>
+            <CardHeader>
+              <CardTitle>Fee Heads</CardTitle>
+              <CardDescription>Create specific fees and link them to an Account Subhead.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex flex-col md:flex-row gap-4 items-end bg-slate-50 p-4 rounded-lg border">
+                <div className="w-full md:w-1/3 space-y-2">
+                  <Label>Fee Name</Label>
+                  <Input placeholder="e.g. Monthly Tuition" value={newFeeHeadName} onChange={e => setNewFeeHeadName(e.target.value)} />
+                </div>
+                <div className="w-full md:w-1/3 space-y-2">
+                  <Label>Link to Account Subhead</Label>
+                  <Select onValueChange={setSelectedSubHeadId}>
+                    <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                    <SelectContent>
+                      {accountSubHeads.map(sh => <SelectItem key={sh.id} value={sh.id}>{sh.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleCreateFeeHead} disabled={!selectedSubHeadId || !newFeeHeadName}>
+                  <Plus className="mr-2 h-4 w-4"/> Create Fee Head
+                </Button>
               </div>
-              <div className="grid gap-2">
+
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {feeHeads.map(head => (
-                  <div key={head.id} className="p-3 border rounded bg-slate-50 font-medium">
-                    {head.name} <span className="text-xs text-muted-foreground ml-2">({head.type})</span>
+                  <div key={head.id} className="p-4 border rounded-lg hover:shadow-sm transition-shadow">
+                    <div className="font-semibold text-lg">{head.name}</div>
+                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      Linked to: <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">{head.accountSubHead?.name || 'Unlinked'}</span>
+                    </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => setActiveTab("structure")}>Next: Assign Amounts <ArrowRight className="ml-2 h-4 w-4"/></Button>
+          </div>
         </TabsContent>
 
-        {/* --- TAB 2: FEE STRUCTURE --- */}
+        {/* --- TAB 3: FEE STRUCTURE --- */}
         <TabsContent value="structure">
           <Card>
             <CardHeader>
               <CardTitle>Class Fee Mapping</CardTitle>
-              <CardDescription>Assign amounts to fee heads for a specific class.</CardDescription>
+              <CardDescription>Assign amounts to fee heads for specific classes.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div>
+              <div className="max-w-md">
                 <Label>Select Class</Label>
                 <Select onValueChange={setSelectedClassId}>
                   <SelectTrigger><SelectValue placeholder="Choose Class..." /></SelectTrigger>
@@ -113,21 +248,32 @@ export default function FinanceConfigPage() {
                 </Select>
               </div>
 
-              {selectedClassId && (
-                <div className="space-y-4 border p-4 rounded-lg">
-                  {feeHeads.map(head => (
-                    <div key={head.id} className="flex items-center justify-between">
-                      <Label className="w-1/3">{head.name}</Label>
-                      <Input 
-                        type="number" 
-                        className="w-40" 
-                        placeholder="0.00"
-                        value={feeStructures[head.id] || ''}
-                        onChange={(e) => setFeeStructures(prev => ({ ...prev, [head.id]: Number(e.target.value) }))}
-                      />
-                    </div>
-                  ))}
-                  <Button onClick={saveStructure} className="w-full"><Save className="mr-2 h-4 w-4" /> Save Configuration</Button>
+              {selectedClassId ? (
+                <div className="space-y-1">
+                  <div className="grid gap-3 border p-6 rounded-lg bg-slate-50/50">
+                    {feeHeads.map(head => (
+                      <div key={head.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                        <Label className="w-1/3 cursor-pointer">{head.name}</Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500">$</span>
+                          <Input 
+                            type="number" 
+                            className="w-32 text-right" 
+                            placeholder="0"
+                            value={feeStructures[head.id] || ''}
+                            onChange={(e) => setFeeStructures(prev => ({ ...prev, [head.id]: Number(e.target.value) }))}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-4 flex justify-end">
+                    <Button onClick={handleSaveStructure} className="w-40"><Save className="mr-2 h-4 w-4" /> Save</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
+                  Select a class to configure fee amounts.
                 </div>
               )}
             </CardContent>

@@ -1,56 +1,57 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/auth';
 
 export async function POST(request: Request) {
   try {
-    const session = await auth();
-    const role = session?.user?.role;
-    const schoolId = session?.user?.schoolId;
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['ACCOUNTANT', 'SUPER_ADMIN'].includes(String(role))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    const { invoiceId, amount, method } = await request.json();
+    const { invoiceId, amount, method, transactionId } = await request.json();
 
-    // 1. Verify Invoice
+    // 1. Get current invoice state
     const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId }
+        where: { id: invoiceId }
     });
 
-    if (!invoice) {
-      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+
+    const newAmount = Number(amount);
+    const currentPaid = Number(invoice.paidAmount);
+    const total = Number(invoice.totalAmount);
+    
+    // Prevent overpayment
+    if (currentPaid + newAmount > total) {
+        return NextResponse.json({ error: "Amount exceeds pending balance" }, { status: 400 });
     }
-    if (role !== 'SUPER_ADMIN' && invoice.schoolId !== schoolId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
-    // 2. Create Payment Record
-    const payment = await prisma.payment.create({
-      data: {
-        amount: amount,
-        method: method || 'CASH',
-        invoiceId: invoiceId,
-        schoolId: invoice.schoolId // Link to same school
-      }
+    // 2. Database Transaction (Ensure data integrity)
+    await prisma.$transaction(async (tx) => {
+        // A. Create Payment Record (History)
+        await tx.payment.create({
+            data: {
+                amount: newAmount,
+                method: method || 'CASH',
+                transactionId: transactionId || null,
+                invoiceId: invoiceId,
+                schoolId: invoice.schoolId,
+                date: new Date()
+            }
+        });
+
+        // B. Update Invoice Status
+        const updatedPaid = currentPaid + newAmount;
+        const newStatus = updatedPaid >= total ? 'PAID' : 'PARTIAL';
+
+        await tx.invoice.update({
+            where: { id: invoiceId },
+            data: {
+                paidAmount: updatedPaid,
+                status: newStatus
+            }
+        });
     });
 
-    // 3. Update Invoice Status
-    const newPaidAmount = Number(invoice.paidAmount) + Number(amount);
-    const isFullyPaid = newPaidAmount >= Number(invoice.totalAmount);
-
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        paidAmount: newPaidAmount,
-        status: isFullyPaid ? 'PAID' : 'PARTIAL'
-      }
-    });
-
-    return NextResponse.json(payment, { status: 201 });
+    return NextResponse.json({ success: true });
 
   } catch (error) {
-    console.error("Payment Error:", error);
+    console.error(error);
     return NextResponse.json({ error: "Payment failed" }, { status: 500 });
   }
 }

@@ -46,6 +46,13 @@ export const authConfig = {
         return Response.redirect(new URL('/', nextUrl));
       }
 
+      if (
+        pathname.startsWith('/exams') &&
+        !['TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(role || '')
+      ) {
+        return Response.redirect(new URL('/', nextUrl));
+      }
+
       if (pathname.startsWith('/portal/parent') && role !== 'PARENT') {
         return Response.redirect(new URL('/', nextUrl));
       }

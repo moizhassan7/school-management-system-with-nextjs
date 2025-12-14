@@ -27,6 +27,13 @@ enum InvoiceStatus {
   PARTIAL
   PAID
   OVERDUE
+  CANCELLED // Add this
+}
+
+enum ChallanStatus {
+  PENDING
+  PAID
+  CANCELLED
 }
 
 enum DiscountType {
@@ -49,7 +56,22 @@ enum Role {
   PARENT
   ACCOUNTANT
 }
+enum ExamType {
+  TERM        // Detailed: Marks per question
+  CLASS_TEST  // Simple: Total Obtained / Total Marks
+}
+model AccountHead {
+  id        String   @id @default(cuid())
+  name      String
+  schoolId  String
+  subheads  AccountSubHead[] @relation("AccountHeadSubheads")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([schoolId, name])
+}
+
+ 
 // --- SCHOOL HIERARCHY ---
 
 model School {
@@ -205,6 +227,7 @@ model User {
   studentRecord     StudentRecord?
   parentRecord      ParentRecord?
   invoices          Invoice[]        // Relation to Finance
+  challans          Challan[]        // Relation to Finance
   studentDiscounts  StudentDiscount[] // Relation to Discounts
   examResults       ExamResult[]     // Relation to Examination
 
@@ -287,11 +310,71 @@ model FeeHead {
   type        FeeType  @default(MONTHLY)
   schoolId    String
   school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  accountSubHeadId String?
+  accountSubHead   AccountSubHead? @relation(fields: [accountSubHeadId], references: [id])
   structures  FeeStructure[]
   discounts   Discount[]
   invoiceItems InvoiceItem[]
+  challanItems ChallanItem[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Challan {
+  id            String        @id @default(cuid())
+  barcode       String        @unique
+  challanNo     String?       @unique
+  studentId     String
+  student       User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  status        ChallanStatus @default(PENDING)
+  items         ChallanItem[]
+  payments      ChallanPayment[]
+  schoolId      String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Optional self-relation to cancel a previous challan
+  cancelsChallanId String? @unique
+  cancelsChallan   Challan? @relation("ChallanCancellation", fields: [cancelsChallanId], references: [id])
+  canceledByChallan Challan? @relation("ChallanCancellation")
+}
+
+model ChallanItem {
+  id         String   @id @default(cuid())
+  amount     Decimal  @db.Decimal(10, 2)
+  feeHeadId  String
+  feeHead    FeeHead  @relation(fields: [feeHeadId], references: [id])
+  challanId  String
+  challan    Challan  @relation(fields: [challanId], references: [id], onDelete: Cascade)
+}
+
+model ChallanPayment {
+  id            String        @id @default(cuid())
+  amount        Decimal       @db.Decimal(10, 2)
+  date          DateTime      @default(now())
+  method        PaymentMethod @default(CASH)
+  transactionId String?
+  challanId     String
+  challan       Challan       @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  schoolId      String
+  createdAt     DateTime      @default(now())
+}
+
+model AccountSubHead {
+  id        String   @id @default(cuid())
+  name      String
+  headId    String?
+  head      AccountHead? @relation("AccountHeadSubheads", fields: [headId], references: [id], onDelete: Cascade)
+  schoolId  String
+  feeHeads  FeeHead[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, name])
 }
 
 model FeeStructure {
@@ -409,11 +492,10 @@ model GradeRange {
   gradeSystemId String
   gradeSystem   GradeSystem @relation(fields: [gradeSystemId], references: [id], onDelete: Cascade)
 }
-
-// 3. The Exam Event (e.g. "Mid Term 2024")
 model Exam {
   id             String   @id @default(cuid())
-  name           String   // e.g. "Final Term 2024"
+  name           String
+  type           ExamType @default(TERM) // NEW
   startDate      DateTime
   endDate        DateTime
   
@@ -422,17 +504,13 @@ model Exam {
   
   schoolId       String
   
-  // Configuration: Which subjects are in this exam?
   configurations ExamConfiguration[]
-
-  // The actual marks entered by teachers
   results        ExamResult[]
   
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
 
-// 4. Subject Settings per Exam (e.g. Math is 100 marks)
 model ExamConfiguration {
   id          String   @id @default(cuid())
   maxMarks    Float    @default(100)
@@ -444,33 +522,64 @@ model ExamConfiguration {
   subjectId   String
   subject     Subject  @relation(fields: [subjectId], references: [id])
   
-  classId     String   // Specific to a class
+  classId     String
   myClass     Class    @relation(fields: [classId], references: [id])
+
+  // NEW: For Term Exams, we define the structure here
+  questions   QuestionDefinition[]
 
   @@unique([examId, subjectId, classId])
 }
 
-// 5. Student Result (e.g. Ali got 85 in Math)
-model ExamResult {
-  id              String   @id @default(cuid())
-  marksObtained   Float
-  remarks         String?
+// NEW: Defines the structure (e.g., Q1, 5 Marks)
+model QuestionDefinition {
+  id            String   @id @default(cuid())
+  label         String   // e.g., "Q1", "MCQ Section", "Essay"
+  maxMarks      Float
+  order         Int      @default(0)
   
-  examId          String
-  exam            Exam     @relation(fields: [examId], references: [id])
+  examConfigId  String
+  examConfig    ExamConfiguration @relation(fields: [examConfigId], references: [id], onDelete: Cascade)
   
-  studentId       String
-  student         User     @relation(fields: [studentId], references: [id])
-  
-  subjectId       String
-  subject         Subject  @relation(fields: [subjectId], references: [id])
-  
-  classId         String
-  myClass         Class    @relation(fields: [classId], references: [id])
+  marks         QuestionMark[] // The actual marks students get for this question
+}
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model ExamResult {
+  id             String   @id @default(cuid())
+  marksObtained  Float    // The calculated total
+  status         String?  // PASS / FAIL (Calculated)
+  
+  examId         String
+  exam           Exam     @relation(fields: [examId], references: [id])
+  
+  studentId      String
+  student        User     @relation(fields: [studentId], references: [id])
+  
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id])
+  
+  classId        String
+  myClass        Class    @relation(fields: [classId], references: [id])
+
+  // NEW: Detailed breakdown
+  questionMarks  QuestionMark[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([examId, studentId, subjectId])
 }
 
+// NEW: Stores the specific mark for a specific question
+model QuestionMark {
+  id             String   @id @default(cuid())
+  obtainedMarks  Float
+  
+  examResultId   String
+  examResult     ExamResult @relation(fields: [examResultId], references: [id], onDelete: Cascade)
+  
+  questionDefId  String
+  questionDef    QuestionDefinition @relation(fields: [questionDefId], references: [id])
+
+  @@unique([examResultId, questionDefId])
+}

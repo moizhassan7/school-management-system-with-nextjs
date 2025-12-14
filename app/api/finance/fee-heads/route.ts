@@ -1,31 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/auth';
 
 export async function GET() {
-  const session = await auth();
-  const role = session?.user?.role;
-  const schoolId = session?.user?.schoolId;
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!['ACCOUNTANT', 'SUPER_ADMIN'].includes(String(role))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-  const where = role === 'SUPER_ADMIN' ? {} : { schoolId };
-  const heads = await prisma.feeHead.findMany({ where });
+  const heads = await prisma.feeHead.findMany({
+    include: { accountSubHead: true }, // Include the parent subhead info
+    orderBy: { name: 'asc' }
+  });
   return NextResponse.json(heads);
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  const role = session?.user?.role;
-  const schoolId = session?.user?.schoolId;
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!['ACCOUNTANT', 'SUPER_ADMIN'].includes(String(role))) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
   const body = await req.json();
   const head = await prisma.feeHead.create({
-    data: { name: body.name, schoolId: role === 'SUPER_ADMIN' ? body.schoolId : schoolId, type: body.type }
+    data: { 
+      name: body.name, 
+      schoolId: body.schoolId, 
+      type: body.type,
+      accountSubHeadId: body.accountSubHeadId // Link to Accounting
+    }
   });
   return NextResponse.json(head);
 }

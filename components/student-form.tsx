@@ -5,11 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Search, UserCheck, UserPlus, X, Check, Building2, Users, Layers, BookOpen } from 'lucide-react';
+import { 
+    Loader2, Search, Save, X, Building2, User, Users, Calendar, 
+    Phone, Mail, MapPin, Check, Upload, GraduationCap, Briefcase 
+} from 'lucide-react';
 import { format } from "date-fns";
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
     Form,
     FormControl,
@@ -17,7 +21,6 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-    FormDescription,
 } from '@/components/ui/form';
 import {
     Select,
@@ -26,13 +29,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
-// --- 1. Zod Validation Schema ---
+// --- Validation Schema ---
 const studentFormSchema = z.object({
-    // User Account
     name: z.string().min(1, 'Full name is required'),
     email: z.string().email('Invalid email address'),
     password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -40,30 +42,22 @@ const studentFormSchema = z.object({
     phone: z.string().optional(),
     address: z.string().optional(),
     
-    // Hierarchy (Helpers for filtering)
     schoolId: z.string().min(1, 'School is required'),
     campusId: z.string().min(1, 'Campus is required'),
     classGroupId: z.string().min(1, 'Class Group is required'),
-    
-    // Academic Assignment
     classId: z.string().min(1, 'Class is required'),
-    sectionId: z.string().optional(), // Optional initially
-    subjectGroupId: z.string().optional(), // Optional (Student might not have a stream yet)
+    sectionId: z.string().optional(),
+    subjectGroupId: z.string().optional(),
     
-    // Student Specifics
     admissionNumber: z.string().min(1, 'Admission number is required'),
     rollNumber: z.string().optional(),
     admissionDate: z.string().min(1, 'Admission date is required'),
     
-    // Session
-    startYear: z.string().regex(/^\d{4}$/, 'Must be a 4-digit year'),
-    stopYear: z.string().regex(/^\d{4}$/, 'Must be a 4-digit year'),
+    startYear: z.string().regex(/^\d{4}$/, 'Must be 4 digits'),
+    stopYear: z.string().regex(/^\d{4}$/, 'Must be 4 digits'),
 
-    // Parent Logic
     parentMode: z.enum(['LINK', 'CREATE']),
     selectedParentId: z.string().optional(),
-    
-    // New Parent Details
     parentName: z.string().optional(),
     parentEmail: z.string().email().optional().or(z.literal('')),
     parentPhone: z.string().optional(),
@@ -74,34 +68,20 @@ const studentFormSchema = z.object({
 
 type FormValues = z.infer<typeof studentFormSchema>;
 
-// --- 2. Types ---
-interface School { id: string; name: string; }
-interface Campus { id: string; name: string; schoolId: string; }
-interface ClassGroup { 
-    id: string; 
-    name: string; 
-    campusId: string;
-    // Relations included in API response
-    campus?: { schoolId: string; name: string };
-    classes?: { id: string; name: string }[];
-    subjectGroups?: { id: string; name: string }[];
-}
-interface Section { id: string; name: string; }
-
 export default function StudentForm() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // --- 3. Data States ---
-    const [schools, setSchools] = useState<School[]>([]);
-    const [rawClassGroups, setRawClassGroups] = useState<ClassGroup[]>([]);
+    // --- Data States ---
+    const [schools, setSchools] = useState<any[]>([]);
+    const [rawClassGroups, setRawClassGroups] = useState<any[]>([]);
     
-    // Filtered Options based on selection
-    const [availableCampuses, setAvailableCampuses] = useState<Campus[]>([]);
-    const [availableGroups, setAvailableGroups] = useState<ClassGroup[]>([]);
-    const [availableClasses, setAvailableClasses] = useState<{ id: string; name: string }[]>([]);
-    const [availableStreams, setAvailableStreams] = useState<{ id: string; name: string }[]>([]);
-    const [availableSections, setAvailableSections] = useState<Section[]>([]);
+    // Filtered Options
+    const [availableCampuses, setAvailableCampuses] = useState<any[]>([]);
+    const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+    const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+    const [availableStreams, setAvailableStreams] = useState<any[]>([]);
+    const [availableSections, setAvailableSections] = useState<any[]>([]);
 
     // Parent Search
     const [searchQuery, setSearchQuery] = useState('');
@@ -109,11 +89,10 @@ export default function StudentForm() {
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [selectedParent, setSelectedParent] = useState<any>(null);
 
-    // --- 4. Form Init ---
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
         defaultValues: {
-            name: '', email: '', password: '', gender: 'UNSPECIFIED', phone: '', address: '',
+            name: '', email: '', password: '', gender: 'MALE', phone: '', address: '',
             schoolId: '', campusId: '', classGroupId: '', classId: '', sectionId: '', subjectGroupId: '',
             admissionNumber: '', rollNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
             startYear: new Date().getFullYear().toString(),
@@ -123,21 +102,13 @@ export default function StudentForm() {
         },
     });
 
-    // Watchers for Filtering
-    const selectedSchool = form.watch('schoolId');
-    const selectedCampus = form.watch('campusId');
-    const selectedGroup = form.watch('classGroupId');
-    const selectedClass = form.watch('classId');
-
-    // --- 5. Logic & Effects ---
-
-    // Load Initial Data (Schools & All Groups)
+    // --- Logic Effects (Keep existing logic) ---
     useEffect(() => {
         const loadData = async () => {
             try {
                 const [schoolRes, groupRes] = await Promise.all([
                     fetch('/api/schools'),
-                    fetch('/api/class-groups') // This MUST return full hierarchy (classes, subjectGroups, campus)
+                    fetch('/api/class-groups')
                 ]);
                 if(schoolRes.ok) setSchools(await schoolRes.json());
                 if(groupRes.ok) setRawClassGroups(await groupRes.json());
@@ -146,46 +117,32 @@ export default function StudentForm() {
         loadData();
     }, []);
 
-    // Filter Campuses when School Changes
+    // ... (Keep existing filtering effects for Campus, Group, Class, Section) ...
+    const selectedSchool = form.watch('schoolId');
+    const selectedCampus = form.watch('campusId');
+    const selectedGroup = form.watch('classGroupId');
+    const selectedClass = form.watch('classId');
+
     useEffect(() => {
-        if (!selectedSchool) {
-            setAvailableCampuses([]);
-            return;
-        }
-        // Extract unique campuses from the raw class groups that match the school
-        // Or if you have a separate /campuses API, use that. 
-        // Here we derive it from the classGroups data structure for efficiency if populated.
-        // Assuming rawClassGroups includes `campus: { id, name, schoolId }`
+        if (!selectedSchool) { setAvailableCampuses([]); return; }
         const campusMap = new Map();
         rawClassGroups.forEach(g => {
             if (g.campus && g.campus.schoolId === selectedSchool) {
-                campusMap.set(g.campusId, { id: g.campusId, name: g.campus.name, schoolId: g.campus.schoolId });
+                campusMap.set(g.campusId, { id: g.campusId, name: g.campus.name });
             }
         });
         setAvailableCampuses(Array.from(campusMap.values()));
-        
-        // Reset downstream
         form.setValue('campusId', '');
     }, [selectedSchool, rawClassGroups, form]);
 
-    // Filter Class Groups when Campus Changes
     useEffect(() => {
-        if (!selectedCampus) {
-            setAvailableGroups([]);
-            return;
-        }
-        const groups = rawClassGroups.filter(g => g.campusId === selectedCampus);
-        setAvailableGroups(groups);
+        if (!selectedCampus) { setAvailableGroups([]); return; }
+        setAvailableGroups(rawClassGroups.filter(g => g.campusId === selectedCampus));
         form.setValue('classGroupId', '');
     }, [selectedCampus, rawClassGroups, form]);
 
-    // Filter Classes & Streams when Group Changes
     useEffect(() => {
-        if (!selectedGroup) {
-            setAvailableClasses([]);
-            setAvailableStreams([]);
-            return;
-        }
+        if (!selectedGroup) { setAvailableClasses([]); setAvailableStreams([]); return; }
         const group = rawClassGroups.find(g => g.id === selectedGroup);
         if (group) {
             setAvailableClasses(group.classes || []);
@@ -195,21 +152,12 @@ export default function StudentForm() {
         form.setValue('subjectGroupId', '');
     }, [selectedGroup, rawClassGroups, form]);
 
-    // Fetch Sections when Class Changes
     useEffect(() => {
-        if (!selectedClass) {
-            setAvailableSections([]);
-            form.setValue('sectionId', '');
-            return;
-        }
-        fetch(`/api/classes/${selectedClass}/sections`)
-            .then(res => res.json())
-            .then(setAvailableSections)
-            .catch(console.error);
+        if (!selectedClass) { setAvailableSections([]); form.setValue('sectionId', ''); return; }
+        fetch(`/api/classes/${selectedClass}/sections`).then(res => res.json()).then(setAvailableSections);
     }, [selectedClass, form]);
 
-
-    // --- 6. Parent Logic ---
+    // ... (Keep Parent Search Logic) ...
     const handleSearchParent = async () => {
         if (!searchQuery || searchQuery.length < 3) return;
         setIsSearching(true);
@@ -221,53 +169,37 @@ export default function StudentForm() {
 
     const selectParent = (parent: any) => {
         setSelectedParent(parent);
-        form.setValue('selectedParentId', parent.id); // ParentRecord ID
+        form.setValue('selectedParentId', parent.id);
         form.setValue('parentMode', 'LINK');
+        // Auto-fill visuals only
         setSearchResults([]); 
     };
 
-    const clearParentSelection = () => {
-        setSelectedParent(null);
-        form.setValue('selectedParentId', '');
-        form.setValue('parentMode', 'CREATE');
-    };
-
-    // --- 7. Submit Handler ---
     const onSubmit = async (data: FormValues) => {
         setIsSubmitting(true);
         try {
-            // Construct API Payload
+            // ... (Keep existing payload construction & API calls) ...
             const payload = {
-                name: data.name,
-                email: data.email,
-                password: data.password,
-                schoolId: data.schoolId,
-                gender: data.gender,
-                phone: data.phone,
-                address: data.address,
+                name: data.name, email: data.email, password: data.password, schoolId: data.schoolId,
+                gender: data.gender, phone: data.phone, address: data.address,
                 student: {
-                    admissionNumber: data.admissionNumber,
-                    rollNumber: data.rollNumber || undefined, // NEW
-                    admissionDate: data.admissionDate,
-                    classId: data.classId,
-                    sectionId: data.sectionId || undefined,
-                    subjectGroupId: data.subjectGroupId || undefined, // NEW
+                    admissionNumber: data.admissionNumber, rollNumber: data.rollNumber || undefined,
+                    admissionDate: data.admissionDate, classId: data.classId,
+                    sectionId: data.sectionId || undefined, subjectGroupId: data.subjectGroupId || undefined,
                     academicYear: { startYear: data.startYear, stopYear: data.stopYear }
                 }
             };
 
-            // Create Student
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
-            if (!res.ok) throw new Error((await res.json()).error || 'Creation failed');
+            if (!res.ok) throw new Error('Creation failed');
             const studentUser = await res.json();
             const studentRecordId = studentUser.studentRecord?.id;
 
-            // Handle Parent
             if (data.parentMode === 'LINK' && data.selectedParentId) {
                 await fetch(`/api/parents/${data.selectedParentId}/students`, {
                     method: 'POST',
@@ -286,314 +218,340 @@ export default function StudentForm() {
                     }),
                 });
             }
-
             router.push('/students');
             router.refresh();
         } catch (error) {
             console.error(error);
-            form.setError('root', { message: error instanceof Error ? error.message : 'Error occurred' });
-        } finally {
-            setIsSubmitting(false);
-        }
+            form.setError('root', { message: 'Failed to create student' });
+        } finally { setIsSubmitting(false); }
     };
 
     return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                
-                {/* Global Error */}
-                {form.formState.errors.root && (
-                    <div className="bg-destructive/15 text-destructive text-sm p-4 rounded-md border border-destructive/20">
-                        {form.formState.errors.root.message}
-                    </div>
-                )}
+        <div className="w-full max-w-5xl flex flex-col gap-8 mx-auto py-8 px-4">
+            
+            {/* Header Section */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">New Student Admission</h1>
+                    <p className="text-slate-500 dark:text-slate-400 text-base">Complete the form below to enroll a new student into the system.</p>
+                </div>
+                <div className="flex gap-3">
+                    <Button variant="outline" onClick={() => router.back()} className="bg-white dark:bg-slate-800 border-slate-200 text-slate-700">
+                        Cancel
+                    </Button>
+                    <Button onClick={form.handleSubmit(onSubmit)} className="bg-primary hover:bg-primary/90 text-white shadow-md shadow-blue-500/20">
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                        Submit Admission
+                    </Button>
+                </div>
+            </div>
 
-                {/* 1. ACADEMIC PLACEMENT (Hierarchy) */}
-                <Card>
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center gap-2">
-                            <Building2 className="h-5 w-5 text-indigo-600" />
-                            <CardTitle>School & Class Placement</CardTitle>
+            <Form {...form}>
+                <form className="flex flex-col gap-6">
+                    
+                    {/* 1. School & Placement Card */}
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center gap-3">
+                            <div className="text-primary bg-primary/10 p-1.5 rounded-lg">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">School & Class Placement</h3>
                         </div>
-                        <CardDescription>Assign the student to their campus and class level.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-6">
-                        {/* School & Campus */}
-                        <div className="grid md:grid-cols-2 gap-6">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                             <FormField control={form.control} name="schoolId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>School</FormLabel>
+                                    <FormLabel className="text-slate-700">School Branch *</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Select School" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-
                             <FormField control={form.control} name="campusId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Campus</FormLabel>
+                                    <FormLabel className="text-slate-700">Campus Type</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSchool}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Select Campus" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{availableCampuses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-                        </div>
-
-                        <Separator />
-
-                        {/* Class Group & Details */}
-                        <div className="grid md:grid-cols-4 gap-4">
                             <FormField control={form.control} name="classGroupId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Class Group</FormLabel>
+                                    <FormLabel className="text-slate-700">Class Group</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedCampus}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Middle Section" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{availableGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-
                             <FormField control={form.control} name="classId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Class</FormLabel>
+                                    <FormLabel className="text-slate-700">Class *</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableClasses.length === 0}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. 9th" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{availableClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-
                             <FormField control={form.control} name="sectionId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Section</FormLabel>
+                                    <FormLabel className="text-slate-700">Section</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableSections.length === 0}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Blue" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{availableSections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-
                             <FormField control={form.control} name="subjectGroupId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Stream (Subject Group)</FormLabel>
+                                    <FormLabel className="text-slate-700">Stream (Optional)</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableStreams.length === 0}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="e.g. Science" /></SelectTrigger></FormControl>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
                                         <SelectContent>{availableStreams.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <FormDescription className="text-[10px]">Optional for junior classes</FormDescription>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-                        </div>
-
-                        {/* Session & Identifiers */}
-                        <div className="grid md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border">
                             <FormField control={form.control} name="admissionNumber" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Admission #</FormLabel>
-                                    <FormControl><Input placeholder="ADM-001" {...field} /></FormControl>
+                                    <FormLabel className="text-slate-700">Admission Number</FormLabel>
+                                    <FormControl><Input {...field} className="bg-white" placeholder="Auto-generated or Enter" /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-                            
                             <FormField control={form.control} name="rollNumber" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Roll No</FormLabel>
-                                    <FormControl><Input placeholder="01" {...field} /></FormControl>
+                                    <FormLabel className="text-slate-700">Roll Number</FormLabel>
+                                    <FormControl><Input {...field} className="bg-white" /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )} />
-
-                            <FormField control={form.control} name="startYear" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Session Start</FormLabel>
-                                    <FormControl><Input maxLength={4} {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="stopYear" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Session End</FormLabel>
-                                    <FormControl><Input maxLength={4} {...field} /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* 2. PERSONAL INFO */}
-                <Card>
-                    <CardHeader className="pb-4">
-                        <div className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-indigo-600" />
-                            <CardTitle>Personal Details</CardTitle>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="grid gap-6 md:grid-cols-2">
-                        <FormField control={form.control} name="name" render={({ field }) => (
-                            <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="gender" render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Gender</FormLabel>
-                                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="MALE">Male</SelectItem>
-                                        <SelectItem value="FEMALE">Female</SelectItem>
-                                        <SelectItem value="OTHER">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )} />
-                        <FormField control={form.control} name="email" render={({ field }) => (
-                            <FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="password" render={({ field }) => (
-                            <FormItem><FormLabel>Password</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="phone" render={({ field }) => (
-                            <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="address" render={({ field }) => (
-                            <FormItem><FormLabel>Address</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                        <FormField control={form.control} name="admissionDate" render={({ field }) => (
-                            <FormItem><FormLabel>Admission Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
-                        )} />
-                    </CardContent>
-                </Card>
-
-                {/* 3. PARENT / GUARDIAN */}
-                <Card className="border-indigo-100 shadow-sm">
-                    <CardHeader className="pb-4">
-                        <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <UserPlus className="h-5 w-5 text-indigo-600" />
-                                <CardTitle>Parent Information</CardTitle>
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField control={form.control} name="startYear" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Session Start</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="stopYear" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Session End</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
+                                    </FormItem>
+                                )} />
                             </div>
-                            {selectedParent && <Badge variant="secondary" className="bg-green-100 text-green-700">Existing Parent Linked</Badge>}
                         </div>
-                        <CardDescription>Link to an existing parent (siblings) or register a new one.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        
-                        {/* Search Area */}
-                        {!selectedParent && (
-                            <div className="bg-slate-50 p-4 rounded-lg border">
-                                <FormLabel className="mb-2 block font-semibold text-slate-700">Link Existing Parent</FormLabel>
-                                <div className="flex gap-2">
-                                    <Input 
-                                        placeholder="Search by CNIC, Email or Phone..." 
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="bg-white"
-                                    />
-                                    <Button type="button" onClick={handleSearchParent} disabled={isSearching}>
-                                        {isSearching ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}
+                    </div>
+
+                    {/* 2. Personal Details Card */}
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 flex items-center gap-3">
+                            <div className="text-purple-500 bg-purple-100 p-1.5 rounded-lg">
+                                <User className="h-5 w-5" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900">Personal Details</h3>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-6">
+                            {/* Photo Placeholder */}
+                            <div className="md:col-span-1 flex flex-col items-center justify-center gap-3">
+                                <div className="size-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors group">
+                                    <Upload className="text-slate-400 group-hover:text-primary transition-colors h-8 w-8" />
+                                    <span className="text-xs text-slate-400 font-medium mt-1">Upload Photo</span>
+                                </div>
+                            </div>
+
+                            <div className="md:col-span-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField control={form.control} name="name" render={({ field }) => (
+                                    <FormItem className="md:col-span-2">
+                                        <FormLabel className="text-slate-700">Full Name *</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                
+                                <FormField control={form.control} name="gender" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Gender *</FormLabel>
+                                        <FormControl>
+                                            <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4 mt-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <RadioGroupItem value="MALE" id="male" className="text-primary" />
+                                                    <Label htmlFor="male">Male</Label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <RadioGroupItem value="FEMALE" id="female" className="text-primary" />
+                                                    <Label htmlFor="female">Female</Label>
+                                                </div>
+                                            </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+
+                                <FormField control={form.control} name="admissionDate" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Date of Admission *</FormLabel>
+                                        <FormControl><Input type="date" {...field} className="bg-white" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+
+                                <FormField control={form.control} name="email" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Email Address</FormLabel>
+                                        <FormControl><Input type="email" {...field} className="bg-white" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+
+                                <FormField control={form.control} name="phone" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Student Phone</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+
+                                <FormField control={form.control} name="address" render={({ field }) => (
+                                    <FormItem className="md:col-span-2">
+                                        <FormLabel className="text-slate-700">Residential Address</FormLabel>
+                                        <FormControl><Textarea {...field} className="bg-white" rows={2} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                                
+                                <FormField control={form.control} name="password" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Student Password</FormLabel>
+                                        <FormControl><Input type="password" {...field} className="bg-white" /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Parent Information */}
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="text-green-600 bg-green-100 p-1.5 rounded-lg">
+                                    <Users className="h-5 w-5" />
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-900">Parent / Guardian Information</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch 
+                                    id="parent-link"
+                                    checked={form.watch('parentMode') === 'LINK'}
+                                    onCheckedChange={(c) => form.setValue('parentMode', c ? 'LINK' : 'CREATE')} 
+                                />
+                                <Label htmlFor="parent-link" className="text-sm text-slate-600">Link Existing Parent?</Label>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            
+                            {/* Search Box */}
+                            {form.watch('parentMode') === 'LINK' && !selectedParent && (
+                                <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-4 items-center">
+                                    <div className="flex-1 relative">
+                                        <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                                        <Input 
+                                            placeholder="Search Parent by CNIC or Name..." 
+                                            className="pl-10 bg-white border-slate-300"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                        />
+                                    </div>
+                                    <Button type="button" onClick={handleSearchParent} className="bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">
+                                        {isSearching ? <Loader2 className="h-4 w-4 animate-spin"/> : "Search"}
                                     </Button>
                                 </div>
+                            )}
 
-                                {searchResults.length > 0 && (
-                                    <div className="mt-3 space-y-2">
-                                        {searchResults.map((p) => (
-                                            <div key={p.id} className="flex items-center justify-between p-3 bg-white border rounded shadow-sm hover:border-indigo-300 transition-colors">
-                                                <div>
-                                                    <p className="font-medium text-slate-900">{p.user.name}</p>
-                                                    <p className="text-xs text-muted-foreground">{p.cnic || 'No CNIC'} • {p.user.phone}</p>
-                                                </div>
-                                                <Button size="sm" variant="outline" type="button" onClick={() => selectParent(p)}>
-                                                    <UserCheck className="h-4 w-4 mr-2 text-green-600" /> Select
-                                                </Button>
+                            {/* Search Results */}
+                            {searchResults.length > 0 && (
+                                <div className="mb-6 space-y-2">
+                                    {searchResults.map((p) => (
+                                        <div key={p.id} className="flex justify-between p-3 bg-white border rounded shadow-sm items-center">
+                                            <div>
+                                                <p className="font-bold">{p.user.name}</p>
+                                                <p className="text-xs text-slate-500">{p.cnic}</p>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                            <Button size="sm" variant="outline" onClick={() => selectParent(p)}>Select</Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
-                        {/* Selected Parent View */}
-                        {selectedParent && (
-                            <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-green-100 p-2 rounded-full"><UserCheck className="h-5 w-5 text-green-700" /></div>
+                            {/* Selected Parent */}
+                            {selectedParent && (
+                                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex justify-between items-center">
                                     <div>
                                         <p className="font-bold text-green-800">{selectedParent.user.name}</p>
                                         <p className="text-sm text-green-600">CNIC: {selectedParent.cnic}</p>
                                     </div>
+                                    <Button size="sm" variant="ghost" onClick={() => setSelectedParent(null)}><X className="h-4 w-4"/></Button>
                                 </div>
-                                <Button size="sm" variant="ghost" type="button" onClick={clearParentSelection}>
-                                    <X className="h-4 w-4 mr-2" /> Change
-                                </Button>
-                            </div>
-                        )}
+                            )}
 
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="relationship" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Relationship to Student</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value="FATHER">Father</SelectItem>
-                                            <SelectItem value="MOTHER">Mother</SelectItem>
-                                            <SelectItem value="GUARDIAN">Guardian</SelectItem>
-                                            <SelectItem value="OTHER">Other</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
+                            <div className="border-t border-slate-200 pt-6 mt-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField control={form.control} name="relationship" render={({ field }) => (
+                                    <FormItem className="md:col-span-2">
+                                        <FormLabel className="text-slate-700">Relationship *</FormLabel>
+                                        <FormControl>
+                                            <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4 mt-2">
+                                                {['FATHER', 'MOTHER', 'GUARDIAN'].map(r => (
+                                                    <div key={r} className="flex items-center space-x-2">
+                                                        <RadioGroupItem value={r} id={r} className="text-primary" />
+                                                        <Label htmlFor={r} className="capitalize">{r.toLowerCase()}</Label>
+                                                    </div>
+                                                ))}
+                                            </RadioGroup>
+                                        </FormControl>
+                                    </FormItem>
+                                )} />
+
+                                {form.watch('parentMode') === 'CREATE' && !selectedParent && (
+                                    <>
+                                        <FormField control={form.control} name="parentName" render={({ field }) => (
+                                            <FormItem><FormLabel className="text-slate-700">Parent Name *</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="parentCnic" render={({ field }) => (
+                                            <FormItem><FormLabel className="text-slate-700">CNIC Number *</FormLabel><FormControl><Input {...field} className="bg-white" placeholder="XXXXX-XXXXXXX-X" /></FormControl><FormMessage /></FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="parentPhone" render={({ field }) => (
+                                            <FormItem><FormLabel className="text-slate-700">Contact Phone *</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="parentOccupation" render={({ field }) => (
+                                            <FormItem><FormLabel className="text-slate-700">Occupation</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="parentEmail" render={({ field }) => (
+                                            <FormItem><FormLabel className="text-slate-700">Email Address (Optional)</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
+                                        )} />
+                                    </>
+                                )}
+                            </div>
                         </div>
+                    </div>
 
-                        {/* Create New Parent Fields */}
-                        {!selectedParent && (
-                            <div className="animate-in fade-in slide-in-from-top-4 space-y-4 pt-4 border-t">
-                                <h4 className="font-semibold text-sm text-indigo-600 uppercase tracking-wide">New Parent Details</h4>
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="parentName" render={({ field }) => (
-                                        <FormItem><FormLabel>Parent Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="parentCnic" render={({ field }) => (
-                                        <FormItem><FormLabel>CNIC</FormLabel><FormControl><Input placeholder="00000-0000000-0" {...field} /></FormControl><FormMessage /></FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="parentPhone" render={({ field }) => (
-                                        <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="parentOccupation" render={({ field }) => (
-                                        <FormItem><FormLabel>Occupation</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                    )} />
-                                    <FormField control={form.control} name="parentEmail" render={({ field }) => (
-                                        <FormItem><FormLabel>Email (Optional)</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-                                    )} />
-                                </div>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                <div className="flex justify-end gap-4 pt-4 sticky bottom-0 bg-white p-4 border-t z-10">
-                    <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
-                    <Button type="submit" disabled={isSubmitting} className="min-w-[150px]">
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...
-                            </>
-                        ) : (
-                            'Complete Admission'
-                        )}
-                    </Button>
-                </div>
-            </form>
-        </Form>
+                    <div className="flex justify-end gap-3 pt-4 pb-8">
+                        <Button type="button" variant="outline" onClick={() => router.back()} className="bg-white border-slate-200">
+                            Cancel
+                        </Button>
+                        <Button type="button" onClick={form.handleSubmit(onSubmit)} className="bg-primary hover:bg-primary/90 text-white shadow-md">
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                            Submit Admission
+                        </Button>
+                    </div>
+                </form>
+            </Form>
+        </div>
     );
 }
