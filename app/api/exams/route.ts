@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const academicYearId = searchParams.get('academicYearId');
 
-    const where: any = {};
+    const where: any = {
+      schoolId: session.user.schoolId
+    };
     if (academicYearId) where.academicYearId = academicYearId;
 
     const exams = await prisma.exam.findMany({
@@ -48,6 +50,11 @@ export async function POST(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Only admins can create exams
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(session.user.role || '')) {
+      return NextResponse.json({ error: 'Only administrators can create exams' }, { status: 403 });
     }
 
     const body = await request.json();

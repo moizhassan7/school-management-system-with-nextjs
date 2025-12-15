@@ -5,7 +5,7 @@ import { Loader2, Printer, Search, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardHeader, CardTitle, CardContent } from '@/c omponents/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useSidebar } from '@/contexts/SidebarContext';
 import PrintableChallan from '@/components/finance/printable-challan';

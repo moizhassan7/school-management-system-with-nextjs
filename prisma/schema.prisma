@@ -265,6 +265,7 @@ model Kinship {
 model Subject {
   id          String   @id @default(cuid())
   name        String
+  code        String?
   description String?
   subjectGroupId String
   subjectGroup SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
@@ -528,6 +529,9 @@ model ExamConfiguration {
   // NEW: For Term Exams, we define the structure here
   questions   QuestionDefinition[]
 
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
   @@unique([examId, subjectId, classId])
 }
 
@@ -542,6 +546,9 @@ model QuestionDefinition {
   examConfig    ExamConfiguration @relation(fields: [examConfigId], references: [id], onDelete: Cascade)
   
   marks         QuestionMark[] // The actual marks students get for this question
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 }
 
 model ExamResult {
@@ -580,6 +587,9 @@ model QuestionMark {
   
   questionDefId  String
   questionDef    QuestionDefinition @relation(fields: [questionDefId], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   @@unique([examResultId, questionDefId])
 }

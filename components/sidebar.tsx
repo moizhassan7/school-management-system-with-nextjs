@@ -1,271 +1,507 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
-import { useState } from 'react';
-import { useSidebar } from '@/contexts/SidebarContext';
-import { 
-    LayoutDashboard, 
-    GraduationCap, 
-    Users, 
-    Banknote, 
-    Calendar, 
-    Settings, 
-    LogOut, 
-    ChevronRight, 
-    ChevronDown, 
-    School,
-    Building2,
-    Layers,
-    BookOpen,
-    FileText,
-    Award,
-    ClipboardCheck,
-    BarChart3
-} from 'lucide-react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { useState } from "react";
+import { useSidebar } from "@/contexts/SidebarContext";
+import {
+  LayoutDashboard,
+  GraduationCap,
+  Users,
+  Banknote,
+  Calendar,
+  Settings,
+  LogOut,
+  ChevronRight,
+  ChevronDown,
+  School,
+  Building2,
+  Layers,
+  BookOpen,
+  FileText,
+  Award,
+  ClipboardCheck,
+  BarChart3,
+  BookCopy,
+  Network,
+  Plus,
+  CreditCard,
+  FileSpreadsheet,
+  FileBarChart,
+  Home,
+} from "lucide-react";
 
 interface UserSession {
-    name?: string | null;
-    email?: string | null;
-    role?: string;
-    schoolId?: string;
+  name?: string | null;
+  email?: string | null;
+  role?: string;
+  schoolId?: string;
 }
 
 interface SidebarProps {
-    user: UserSession;
+  user: UserSession;
 }
 
 export default function Sidebar({ user }: SidebarProps) {
-    const pathname = usePathname();
-    const { schools } = useSidebar(); // Access hierarchy data
-    const userRole = user.role || 'GUEST'; 
-    
-    // Toggle States
-    const [isAcademicsExpanded, setIsAcademicsExpanded] = useState(false);
-    const [isFinanceExpanded, setIsFinanceExpanded] = useState(false);
-    const [expandedCampuses, setExpandedCampuses] = useState<Set<string>>(new Set());
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const pathname = usePathname();
+  const { schools } = useSidebar(); // Access the full hierarchy tree
+  const userRole = user.role || "GUEST";
 
-    const toggle = (id: string, set: Set<string>, setFn: (s: Set<string>) => void) => {
-        const newSet = new Set(set);
-        newSet.has(id) ? newSet.delete(id) : newSet.add(id);
-        setFn(newSet);
-    };
+  // --- Toggle States ---
+  const [expandedSchools, setExpandedSchools] = useState<Set<string>>(
+    new Set()
+  );
+  const [expandedCampuses, setExpandedCampuses] = useState<Set<string>>(
+    new Set()
+  );
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-    const isActive = (path: string) => pathname === path;
-    const isPathActive = (path: string) => pathname.startsWith(path);
+  // Module States
+  const [isFinanceExpanded, setIsFinanceExpanded] = useState(false);
+  const [isExamsExpanded, setIsExamsExpanded] = useState(false);
 
-    // Permissions
-    const isSuperAdmin = userRole === 'SUPER_ADMIN';
-    const isAccountant = userRole === 'ACCOUNTANT' || isSuperAdmin;
+  // --- Helpers ---
+  const toggle = (
+    id: string,
+    set: Set<string>,
+    setFn: (s: Set<string>) => void
+  ) => {
+    const newSet = new Set(set);
+    newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+    setFn(newSet);
+  };
 
-    const handleLogout = async () => {
-        await signOut({ callbackUrl: '/login' });
-    };
+  const isActive = (path: string) => pathname === path;
+  const isPathActive = (path: string) => pathname.startsWith(path);
 
-    // Helper for Nav Items
-    const NavItem = ({ href, icon: Icon, label, active = false }: any) => (
-        <Link 
-            href={href} 
-            className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
-                ${active 
-                    ? 'bg-primary text-white shadow-md shadow-primary/20' 
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }
-            `}
+  // --- Permissions ---
+  const isSuperAdmin = userRole === "SUPER_ADMIN";
+  const isAdmin = userRole === "ADMIN" || isSuperAdmin;
+  const isAccountant = userRole === "ACCOUNTANT" || isSuperAdmin;
+  const isTeacher = userRole === "TEACHER" || isAdmin;
+
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/login" });
+  };
+
+  return (
+    <aside className="w-64 bg-white dark:bg-[#1a2632] border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-20 transition-colors duration-200">
+      {/* 1. Brand / Header */}
+      <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
+          <GraduationCap className="w-6 h-6 text-primary" />
+          <span>EduManager</span>
+        </div>
+        <div className="mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
+          {userRole.replace("_", " ")} Portal
+        </div>
+      </div>
+
+      {/* 2. Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+        {/* --- Core --- */}
+        <Link
+          href="/"
+          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            isActive("/")
+              ? "bg-primary text-white"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          }`}
         >
-            <Icon className={`w-5 h-5 ${active ? 'fill-current' : ''}`} />
-            <span className="text-sm font-medium">{label}</span>
+          <Home className="w-4 h-4" />
+          Dashboard
         </Link>
-    );
 
-    return (
-        <aside className="w-64 flex-shrink-0 bg-white dark:bg-[#1a2632] border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between z-20 transition-colors duration-200">
-            
-            {/* 1. Header / Branding */}
-            <div className="p-6 pb-2">
-                <div className="flex items-center gap-3 px-2 mb-6">
-                    <div className="bg-primary/10 rounded-lg p-2 flex items-center justify-center text-primary">
-                        <School className="w-6 h-6" />
-                    </div>
-                    <div className="flex flex-col">
-                        <h1 className="text-lg font-bold leading-tight text-slate-900 dark:text-white">EduManager</h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-xs font-normal">Admin Portal</p>
-                    </div>
-                </div>
+        <Link
+          href="/students"
+          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            isPathActive("/students")
+              ? "bg-primary text-white"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Students
+        </Link>
 
-                {/* 2. Main Navigation */}
-                <nav className="flex flex-col gap-1.5 overflow-y-auto max-h-[calc(100vh-200px)] pr-2 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
-                    
-                    <NavItem href="/" icon={LayoutDashboard} label="Dashboard" active={isActive('/')} />
-                    
-                    <NavItem href="/students" icon={GraduationCap} label="Students" active={isPathActive('/students')} />
-                    
-                    <NavItem href="/staff" icon={Users} label="Staff" active={isPathActive('/staff')} />
+        <Link
+          href="/staff"
+          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            isPathActive("/staff")
+              ? "bg-primary text-white"
+              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Staff
+        </Link>
 
-                    {/* Expandable: Finance */}
-                    {isAccountant && (
-                        <div>
-                            <button 
-                                onClick={() => setIsFinanceExpanded(!isFinanceExpanded)} 
-                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 ${isPathActive('/finance') ? 'bg-slate-50 dark:bg-slate-800/50' : ''}`}
-                            >
-                                <Banknote className="w-5 h-5" />
-                                <span className="text-sm font-medium flex-1 text-left">Finance</span>
-                                {isFinanceExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                            </button>
-                            
-                            {isFinanceExpanded && (
-                                <div className="ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
-                                    <Link href="/finance/collect" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/finance/collect') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                        Collect Fees
-                                    </Link>
-                                    <Link href="/finance/invoices" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/finance/invoices') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                        Invoices
-                                    </Link>
-                                    <Link href="/finance/config" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/finance/config') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                        Configuration
-                                    </Link>
-                                </div>
-                            )}
-                        </div>
-                    )}
+        {/* --- Finance Module --- */}
+        {isAccountant && (
+          <div>
+            <button
+              onClick={() => setIsFinanceExpanded(!isFinanceExpanded)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/finance")
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Banknote className="w-4 h-4" />
+              <span className="flex-1 text-left">Finance</span>
+              {isFinanceExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
 
-                    {/* Expandable: Academics Hierarchy */}
-                    <div>
-                        <button 
-                            onClick={() => setIsAcademicsExpanded(!isAcademicsExpanded)} 
-                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        >
-                            <Layers className="w-5 h-5" />
-                            <span className="text-sm font-medium flex-1 text-left">Academics</span>
-                            {isAcademicsExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
-
-                        {isAcademicsExpanded && (
-                            <div className="ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-2">
-                                {schools.map((school: any) => (
-                                    <div key={school.id}>
-                                        {/* School Name (Static or Link) */}
-                                        <div className="px-2 py-1 text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 mt-2">
-                                            {school.name}
-                                        </div>
-                                        
-                                        {/* Campuses */}
-                                        {school.campuses?.map((campus: any) => (
-                                            <div key={campus.id} className="ml-1">
-                                                <button 
-                                                    onClick={() => toggle(campus.id, expandedCampuses, setExpandedCampuses)}
-                                                    className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 text-sm text-slate-600 dark:text-slate-300"
-                                                >
-                                                    <Building2 className="w-3.5 h-3.5 opacity-70" />
-                                                    <span className="truncate flex-1">{campus.name}</span>
-                                                    {expandedCampuses.has(campus.id) ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
-                                                </button>
-
-                                                {/* Class Groups */}
-                                                {expandedCampuses.has(campus.id) && (
-                                                    <div className="ml-3 pl-2 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
-                                                        {campus.classGroups?.map((group: any) => (
-                                                            <div key={group.id}>
-                                                                <button 
-                                                                    onClick={() => toggle(group.id, expandedGroups, setExpandedGroups)}
-                                                                    className="flex items-center gap-2 w-full text-left px-2 py-1 text-xs font-medium text-slate-500 hover:text-primary transition-colors"
-                                                                >
-                                                                    <span className="truncate">{group.name}</span>
-                                                                </button>
-                                                                
-                                                                {/* Classes (Leaves) */}
-                                                                {expandedGroups.has(group.id) && (
-                                                                    <div className="ml-2 mt-1 space-y-0.5">
-                                                                        {group.classes?.map((cls: any) => (
-                                                                            <Link 
-                                                                                key={cls.id} 
-                                                                                href={`/academics/classes/${cls.id}`}
-                                                                                className={`block px-2 py-1 text-[11px] rounded ${isActive(`/academics/classes/${cls.id}`) ? 'bg-primary/10 text-primary font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                                                                            >
-                                                                                {cls.name}
-                                                                            </Link>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <NavItem href="/schedule" icon={Calendar} label="Schedule" active={isPathActive('/schedule')} />
-
-                    {/* Expandable: Exams */}
-                    <div>
-                        <button 
-                            onClick={() => toggle('exams', new Set(), () => {})} 
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 ${isPathActive('/exams') ? 'bg-slate-50 dark:bg-slate-800/50' : ''}`}
-                        >
-                            <FileText className="w-5 h-5" />
-                            <span className="text-sm font-medium flex-1 text-left">Exams</span>
-                            {isPathActive('/exams') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        </button>
-                        
-                        {isPathActive('/exams') && (
-                            <div className="ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
-                                <Link href="/exams/grading-systems" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/grading-systems') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <Award className="inline h-3 w-3 mr-2" />
-                                    Grading Systems
-                                </Link>
-                                <Link href="/exams/configure" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/configure') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <ClipboardCheck className="inline h-3 w-3 mr-2" />
-                                    Exam Configuration
-                                </Link>
-                                <Link href="/exams/marks-entry" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/marks-entry') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <BookOpen className="inline h-3 w-3 mr-2" />
-                                    Marks Entry
-                                </Link>
-                                <Link href="/exams/class-tests" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/class-tests') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <FileText className="inline h-3 w-3 mr-2" />
-                                    Class Tests
-                                </Link>
-                                <Link href="/exams/results/gazette" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/results/gazette') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <BarChart3 className="inline h-3 w-3 mr-2" />
-                                    Results Gazette
-                                </Link>
-                                <Link href="/exams/results/report-card" className={`block px-3 py-2 rounded-md text-sm font-medium ${isActive('/exams/results/report-card') ? 'text-primary bg-primary/5' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}>
-                                    <FileText className="inline h-3 w-3 mr-2" />
-                                    Report Cards
-                                </Link>
-                            </div>
-                        )}
-                    </div>
-                </nav>
-            </div>
-
-            {/* 3. Footer / Bottom Actions */}
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
-                <Link 
-                    href="/settings" 
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            {isFinanceExpanded && (
+              <div className="mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 space-y-1">
+                <Link
+                  href="/finance/invoices"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/finance/invoices")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
                 >
-                    <Settings className="w-5 h-5" />
-                    <span className="text-sm font-medium">Settings</span>
+                  <FileText className="w-3.5 h-3.5" /> Invoices
+                </Link>
+                <Link
+                  href="/finance/collect"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/finance/collect")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" /> Collect Fees
+                </Link>
+                <Link
+                  href="/finance/discounts"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/finance/discounts")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <Banknote className="w-3.5 h-3.5" /> Discounts
+                </Link>
+                <Link
+                  href="/finance/config"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/finance/config")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <Settings className="w-3.5 h-3.5" /> Configuration
+                </Link>
+                <Link href="/parents"  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/parents")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}>
+                <Users className="w-4 h-4" />
+                    Parents Module
                 </Link>
                 
-                <button 
-                    onClick={handleLogout}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-600 transition-colors w-full text-left"
+              </div>
+              
+            )}
+          </div>
+        )}
+
+        {/* --- Exams Module --- */}
+        {isTeacher && (
+          <div>
+            <button
+              onClick={() => setIsExamsExpanded(!isExamsExpanded)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/exams")
+                  ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="flex-1 text-left">Academics & Exams</span>
+              {isExamsExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
+            </button>
+
+            {isExamsExpanded && (
+              <div className="mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 space-y-1">
+                <Link
+                  href="/exams/marks-entry"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/exams/marks-entry")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
                 >
-                    <LogOut className="w-5 h-5" />
-                    <span className="text-sm font-medium">Logout</span>
-                </button>
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Marks Entry
+                </Link>
+                <Link
+                  href="/exams/grading-systems"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/exams/grading-systems")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" /> Grading Rules
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href="/exams/new"
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      isActive("/exams/new")
+                        ? "text-primary font-medium bg-primary/5"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Create Exam
+                  </Link>
+                )}
+                <Link
+                  href="/exams/configure"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/exams/configure")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" /> Exam Setup
+                </Link>
+                <Link
+                  href="/exams/results/report-card"
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive("/exams/results/report-card")
+                      ? "text-primary font-medium bg-primary/5"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  }`}
+                >
+                  <FileBarChart className="w-3.5 h-3.5" /> Report Cards
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- Hierarchy Tree (Admin) --- */}
+        {isAdmin && (
+          <div className="pt-4">
+            <div className="px-3 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Hierarchy
             </div>
-        </aside>
-    );
+
+            {/* Hierarchy Actions */}
+            <Link
+              href="/schools/new"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/schools/new")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              Add School
+            </Link>
+            <Link
+              href="/subject-groups"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive("/subject-groups")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Layers className="w-4 h-4" />
+              Subject Groups
+            </Link>
+
+            {/* --- Dynamic Tree: School -> Campus -> Group -> Class --- */}
+            <div className="mt-2 space-y-2">
+              {schools.map((school: any) => {
+                const isSchoolExpanded = expandedSchools.has(school.id);
+                return (
+                  <div key={school.id}>
+                    {/* School Node */}
+                    <div className="flex items-center gap-1 group">
+                      <button
+                        onClick={() =>
+                          toggle(school.id, expandedSchools, setExpandedSchools)
+                        }
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400"
+                      >
+                        {isSchoolExpanded ? (
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <Link
+                        href={`/schools/${school.id}/campuses`}
+                        className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                      >
+                        <School className="w-3.5 h-3.5 text-blue-500" />
+                        <span className="truncate font-medium">
+                          {school.name}
+                        </span>
+                      </Link>
+                    </div>
+
+                    {/* Campus List */}
+                    {isSchoolExpanded && (
+                      <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
+                        {school.campuses?.map((campus: any) => {
+                          const isCampusExpanded = expandedCampuses.has(
+                            campus.id
+                          );
+                          return (
+                            <div key={campus.id}>
+                              <div className="flex items-center gap-1 group">
+                                <button
+                                  onClick={() =>
+                                    toggle(
+                                      campus.id,
+                                      expandedCampuses,
+                                      setExpandedCampuses
+                                    )
+                                  }
+                                  className={`p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 ${
+                                    !campus.classGroups?.length
+                                      ? "opacity-30 pointer-events-none"
+                                      : ""
+                                  }`}
+                                >
+                                  {isCampusExpanded ? (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                                <Link
+                                  href={`/schools/${school.id}/campuses/${campus.id}`}
+                                  className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                >
+                                  <Building2 className="w-3.5 h-3.5 text-green-500" />
+                                  <span className="truncate">
+                                    {campus.name}
+                                  </span>
+                                </Link>
+                              </div>
+
+                              {/* Class Groups List */}
+                              {isCampusExpanded && (
+                                <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
+                                  {campus.classGroups?.map((group: any) => {
+                                    const isGroupExpanded = expandedGroups.has(
+                                      group.id
+                                    );
+                                    return (
+                                      <div key={group.id}>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() =>
+                                              toggle(
+                                                group.id,
+                                                expandedGroups,
+                                                setExpandedGroups
+                                              )
+                                            }
+                                            className={`p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 ${
+                                              !group.classes?.length
+                                                ? "opacity-30 pointer-events-none"
+                                                : ""
+                                            }`}
+                                          >
+                                            {isGroupExpanded ? (
+                                              <ChevronDown className="w-3.5 h-3.5" />
+                                            ) : (
+                                              <ChevronRight className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+                                          <Link
+                                            href={`/class-groups/${group.id}`}
+                                            className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                          >
+                                            <Layers className="w-3.5 h-3.5 text-orange-400" />
+                                            <span className="truncate">
+                                              {group.name}
+                                            </span>
+                                          </Link>
+                                        </div>
+
+                                        {/* Classes List */}
+                                        {isGroupExpanded && (
+                                          <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-0.5">
+                                            {group.classes?.map((cls: any) => (
+                                              <Link
+                                                key={cls.id}
+                                                href={`/classes/${cls.id}`}
+                                                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors ${
+                                                  isActive(`/classes/${cls.id}`)
+                                                    ? "text-primary font-medium bg-primary/5"
+                                                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                                                }`}
+                                              >
+                                                <BookOpen className="w-3 h-3 text-indigo-400 opacity-70" />
+                                                <span className="truncate">
+                                                  {cls.name}
+                                                </span>
+                                              </Link>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </nav>
+
+      {/* 3. Footer / Profile */}
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-sm font-bold text-white shadow-sm ring-2 ring-white dark:ring-slate-800">
+            {user.name?.charAt(0).toUpperCase() || "U"}
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">
+              {user.name || "User"}
+            </p>
+            <p
+              className="text-xs text-slate-500 truncate"
+              title={user.email || ""}
+            >
+              {user.email || "No Email"}
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-md transition-colors"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
 }

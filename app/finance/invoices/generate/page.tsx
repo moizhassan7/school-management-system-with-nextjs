@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Receipt, CalendarIcon } from 'lucide-react';
+import { Loader2, Receipt } from 'lucide-react';
 import { format } from "date-fns";
 
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,6 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-    FormDescription,
 } from '@/components/ui/form';
 import {
     Select,
@@ -31,7 +30,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 
 const generateSchema = z.object({
     schoolId: z.string().min(1, "School is required"),
-    classGroupId: z.string().min(1, "Class Group is required"), // Just for filtering
+    classGroupId: z.string().min(1, "Class Group is required"), 
     classId: z.string().min(1, "Class is required"),
     month: z.string(),
     year: z.string().regex(/^\d{4}$/),
@@ -42,13 +41,33 @@ type GenerateValues = z.infer<typeof generateSchema>;
 
 export default function GenerateInvoicesPage() {
     const router = useRouter();
-    const { schools, classGroups } = useSidebar();
+    
+    // FIX 1: Only destructure 'schools' as it contains the full hierarchy
+    const { schools } = useSidebar();
+    
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [filteredGroups, setFilteredGroups] = useState<any[]>([]);
     const [filteredClasses, setFilteredClasses] = useState<any[]>([]);
 
-    // Simple hack to flatten classes from classGroups for the dropdown
-    const allClasses = classGroups.flatMap(cg => 
-        (cg.classes || []).map(c => ({ ...c, classGroupId: cg.id }))
+    // FIX 2: Derive flattened lists from the School Hierarchy
+    // Get all groups for filtering logic
+    const allGroups = schools.flatMap(s => 
+        s.campuses.flatMap(c => 
+            c.classGroups.map(cg => ({ ...cg, schoolId: s.id }))
+        )
+    );
+
+    // Get all classes with their linkage info
+    const allClasses = schools.flatMap(s => 
+        s.campuses.flatMap(c => 
+            c.classGroups.flatMap(cg => 
+                (cg.classes || []).map(cls => ({ 
+                    ...cls, 
+                    classGroupId: cg.id,
+                    schoolId: s.id 
+                }))
+            )
+        )
     );
 
     const form = useForm<GenerateValues>({
@@ -63,12 +82,29 @@ export default function GenerateInvoicesPage() {
         },
     });
 
+    const selectedSchool = form.watch('schoolId');
     const selectedGroup = form.watch('classGroupId');
 
-    // Filter classes when group changes
+    // Effect: Filter Groups when School changes
+    useEffect(() => {
+        if (selectedSchool) {
+            const groupsInSchool = allGroups.filter(g => g.schoolId === selectedSchool);
+            setFilteredGroups(groupsInSchool);
+            form.setValue('classGroupId', ''); // Reset child selection
+            form.setValue('classId', '');
+        } else {
+            setFilteredGroups([]);
+        }
+    }, [selectedSchool]);
+
+    // Effect: Filter Classes when Group changes
     useEffect(() => {
         if (selectedGroup) {
-            setFilteredClasses(allClasses.filter(c => c.classGroupId === selectedGroup));
+            const classesInGroup = allClasses.filter(c => c.classGroupId === selectedGroup);
+            setFilteredClasses(classesInGroup);
+            form.setValue('classId', '');
+        } else {
+            setFilteredClasses([]);
         }
     }, [selectedGroup]);
 
@@ -90,7 +126,7 @@ export default function GenerateInvoicesPage() {
             }
 
             alert(result.message);
-            router.push('/finance/invoices'); // Redirect to list page
+            router.push('/finance/invoices'); 
         } catch (error) {
             alert(error instanceof Error ? error.message : 'Error');
         } finally {
@@ -107,7 +143,7 @@ export default function GenerateInvoicesPage() {
                         <h1 className="text-2xl font-bold">Generate Monthly Invoices</h1>
                     </div>
                     <CardDescription>
-                        This tool will bulk generate invoices for all active students in the selected class based on the fee structure and active discounts.
+                        This tool will bulk generate invoices for all active students in the selected class based on the fee structure.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -117,7 +153,7 @@ export default function GenerateInvoicesPage() {
                             {/* School Selection */}
                             <FormField control={form.control} name="schoolId" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>School</FormLabel>
+                                    <FormLabel>School Branch</FormLabel>
                                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                                         <FormControl><SelectTrigger><SelectValue placeholder="Select School" /></SelectTrigger></FormControl>
                                         <SelectContent>
@@ -133,10 +169,10 @@ export default function GenerateInvoicesPage() {
                                 <FormField control={form.control} name="classGroupId" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Class Group</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSchool}>
                                             <FormControl><SelectTrigger><SelectValue placeholder="Select Group" /></SelectTrigger></FormControl>
                                             <SelectContent>
-                                                {classGroups.map(cg => <SelectItem key={cg.id} value={cg.id}>{cg.name}</SelectItem>)}
+                                                {filteredGroups.map(cg => <SelectItem key={cg.id} value={cg.id}>{cg.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                         <FormMessage />
@@ -201,4 +237,4 @@ export default function GenerateInvoicesPage() {
             </Card>
         </div>
     );
-}   
+}

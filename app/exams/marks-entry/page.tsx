@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Search, Save, Calendar, BookOpen, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { Search, Save, Calendar, BookOpen, Users, Loader2, FileOutput, Eye } from 'lucide-react';
+import GazetteView from '@/components/reports/gazette-view';
+import PrintableReportCard from '@/components/reports/printable-report-card';
+
+// --- Interfaces ---
 
 interface Exam {
   id: string;
@@ -31,9 +35,6 @@ interface QuestionDef {
 
 interface Configuration {
   id: string;
-  examId: string;
-  subjectId: string;
-  classId: string;
   maxMarks: number;
   passMarks: number;
   questions: QuestionDef[];
@@ -50,10 +51,13 @@ interface StudentWithMarks {
   questionMarks: {
     id?: string;
     questionDefId: string;
-    obtainedMarks: number;
-    questionDef?: QuestionDef;
+    obtainedMarks: string; // Storing as STRING to fix jumpy inputs
+    maxMarks: number;
+    label: string;
   }[];
 }
+
+// --- Component ---
 
 export default function MarksEntryPage() {
   const [exams, setExams] = useState<Exam[]>([]);
@@ -68,15 +72,36 @@ export default function MarksEntryPage() {
 
   const [configuration, setConfiguration] = useState<Configuration | null>(null);
   const [students, setStudents] = useState<StudentWithMarks[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'entry' | 'gazette' | 'card'>('entry');
+  const [selectedStudent, setSelectedStudent] = useState<StudentWithMarks | null>(null);
 
+  // --- Initial Data ---
   useEffect(() => {
-    fetchInitialData();
+    const fetchData = async () => {
+      try {
+        const [e, s, c] = await Promise.all([
+          fetch('/api/exams').then(r => r.ok ? r.json() : []),
+          fetch('/api/subjects').then(r => r.ok ? r.json() : []),
+          fetch('/api/classes').then(r => r.ok ? r.json() : [])
+        ]);
+        setExams(e);
+        setSubjects(s);
+        setClasses(c);
+      } catch (err) {
+        toast.error('Failed to load dropdowns');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
+  // --- Fetch Marks on Filter Change ---
   useEffect(() => {
     if (filters.examId && filters.subjectId && filters.classId) {
       fetchMarks();
@@ -86,300 +111,327 @@ export default function MarksEntryPage() {
     }
   }, [filters]);
 
-  const fetchInitialData = async () => {
-    try {
-      const [examsRes, subjectsRes, classesRes] = await Promise.all([
-        fetch('/api/exams'),
-        fetch('/api/subjects'),
-        fetch('/api/classes')
-      ]);
-      if (examsRes.ok) setExams(await examsRes.json());
-      if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (classesRes.ok) setClasses(await classesRes.json());
-    } catch {
-      toast.error('Failed to fetch initial data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchMarks = async () => {
     setFetching(true);
     try {
       const url = `/api/exams/marks?examId=${filters.examId}&classId=${filters.classId}&subjectId=${filters.subjectId}`;
       const res = await fetch(url);
+      
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error || 'Failed to load marks');
-        return;
+        throw new Error('Failed to load marks');
       }
+      
       const data = await res.json();
       setConfiguration(data.configuration);
+      
       const questionDefs: QuestionDef[] = data.configuration.questions;
-      const normalizedStudents: StudentWithMarks[] = (data.students || []).map((s: StudentWithMarks) => {
-        const qmMap = new Map(s.questionMarks.map(qm => [qm.questionDefId, qm]));
+      
+      const normalizedStudents: StudentWithMarks[] = (data.students || []).map((s: any) => {
+        const qmMap = new Map((s.questionMarks || []).map((qm: any) => [qm.questionDefId, qm]));
+        
         const merged = questionDefs.map(q => {
-          const existing = qmMap.get(q.id);
+          const existing = qmMap.get(q.id) as any;
+          // Convert number from DB to string for stable input state
+          const val = existing?.obtainedMarks !== undefined ? String(existing.obtainedMarks) : "0";
           return {
             id: existing?.id,
             questionDefId: q.id,
-            obtainedMarks: existing?.obtainedMarks ?? 0,
-            questionDef: q
+            obtainedMarks: val,
+            maxMarks: q.maxMarks,
+            label: q.label
           };
         });
-        const total = merged.reduce((sum, m) => sum + (Number(m.obtainedMarks) || 0), 0);
+
+        const total = merged.reduce((sum, m) => sum + (parseFloat(m.obtainedMarks) || 0), 0);
+        
         return {
-          ...s,
+          studentId: s.studentId, // Ensure API sends this correctly now!
+          studentName: s.studentName,
+          admissionNumber: s.admissionNumber || '',
+          resultId: s.resultId,
           totalObtained: total,
           status: total >= data.configuration.passMarks ? 'PASS' : 'FAIL',
+          grade: s.grade,
           questionMarks: merged
         };
       });
+
       setStudents(normalizedStudents);
-    } catch {
+    } catch (error) {
+      console.error(error);
       toast.error('Failed to load marks');
     } finally {
       setFetching(false);
     }
   };
 
+  // --- Handlers ---
+
   const filteredStudents = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return students.filter(s =>
       s.studentName.toLowerCase().includes(q) ||
-      s.admissionNumber?.toLowerCase().includes(q)
+      (s.admissionNumber || '').toLowerCase().includes(q)
     );
   }, [students, searchQuery]);
 
-  const updateMark = (studentId: string, questionDefId: string, value: number) => {
+  // Calculate grade from percentage
+  const calculateGrade = (percentage: number): string => {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B+';
+    if (percentage >= 60) return 'B';
+    if (percentage >= 50) return 'C';
+    if (percentage >= 40) return 'D';
+    return 'F';
+  };
+
+  // Transform marks data for gazette view
+  const gazetteData = useMemo(() => {
+    if (!configuration || students.length === 0) return [];
+
+    return students.map(student => {
+      const subjects = student.questionMarks.map(qm => ({
+        subjectName: qm.label,
+        maxMarks: qm.maxMarks,
+        obtained: parseFloat(qm.obtainedMarks) || 0,
+        status: (parseFloat(qm.obtainedMarks) || 0) >= configuration.passMarks ? 'PASS' : 'FAIL'
+      }));
+
+      const totalObtained = parseFloat(String(student.totalObtained));
+      const totalMax = configuration.questions.reduce((sum, q) => sum + q.maxMarks, 0);
+      const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
+
+      return {
+        studentId: student.studentId,
+        studentName: student.studentName,
+        admissionNo: student.admissionNumber,
+        subjects,
+        summary: {
+          totalObtained,
+          totalMax,
+          percentage,
+          grade: student.grade || calculateGrade(percentage)
+        }
+      };
+    });
+  }, [students, configuration]);
+
+  // Stable Input Handler
+  const updateMark = (studentId: string, questionDefId: string, valueStr: string) => {
     setStudents(prev =>
       prev.map(s => {
         if (s.studentId !== studentId) return s;
-        const questionMarks = s.questionMarks.map(qm =>
-          qm.questionDefId === questionDefId
-            ? { ...qm, obtainedMarks: Math.min(Math.max(0, value), qm.questionDef!.maxMarks) }
-            : qm
-        );
-        const totalObtained = questionMarks.reduce((sum, m) => sum + (Number(m.obtainedMarks) || 0), 0);
+
+        // Validation: Allow empty string, otherwise must be number
+        if (valueStr !== '' && isNaN(parseFloat(valueStr))) return s;
+
+        const questionMarks = s.questionMarks.map(qm => {
+          if (qm.questionDefId === questionDefId) {
+             // Optional: Check max marks but don't block typing
+             const num = parseFloat(valueStr);
+             if (num > qm.maxMarks) {
+                 // You can toast error here or clamp. Clamping interrupts typing usually.
+                 // We will just update state and let validation handle save.
+             }
+             return { ...qm, obtainedMarks: valueStr };
+          }
+          return qm;
+        });
+
+        const totalObtained = questionMarks.reduce((sum, m) => sum + (parseFloat(m.obtainedMarks) || 0), 0);
         const status = configuration && totalObtained >= configuration.passMarks ? 'PASS' : 'FAIL';
+        
         return { ...s, questionMarks, totalObtained, status };
       })
     );
   };
 
   const saveStudent = async (student: StudentWithMarks) => {
-    if (!configuration) return;
+    if (!filters.examId || !filters.classId || !filters.subjectId) {
+      toast.error('Missing filters');
+      return;
+    }
+    
+    // Safety check for studentId
+    if (!student.studentId) {
+      toast.error('Error: Student ID missing. Check API response.');
+      console.error('Missing studentId for:', student);
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
-        examId: configuration.examId,
+        examId: filters.examId,
+        subjectId: filters.subjectId,
+        classId: filters.classId,
         studentId: student.studentId,
-        subjectId: configuration.subjectId,
-        classId: configuration.classId,
         questionMarks: student.questionMarks.map(qm => ({
           questionDefId: qm.questionDefId,
-          obtainedMarks: Number(qm.obtainedMarks) || 0
+          // Convert string back to number for API
+          obtainedMarks: qm.obtainedMarks === '' ? 0 : Number(qm.obtainedMarks)
         }))
       };
+
       const res = await fetch('/api/exams/marks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        toast.error(err.error || 'Failed to save marks');
-        return;
+        throw new Error(err.error || 'Failed to save');
       }
+
       const data = await res.json();
-      toast.success(`Saved: ${student.studentName} — ${data.status} (${Math.round(data.percentage)}%)`);
-      await fetchMarks();
-    } catch {
-      toast.error('Failed to save marks');
+      toast.success(`Saved: ${student.studentName}`);
+      
+      setStudents(prev => prev.map(s => 
+        s.studentId === student.studentId ? {
+           ...s, 
+           grade: data.grade, // if API returns calculated grade
+           status: data.status,
+           resultId: data.examResultId 
+        } : s
+      ));
+
+    } catch (error: any) {
+      toast.error(error.message);
     } finally {
       setSaving(false);
     }
   };
 
   const saveAll = async () => {
-    if (!configuration) return;
     setSaving(true);
     try {
       for (const s of filteredStudents) {
         await saveStudent(s);
       }
-      toast.success('All marks saved');
+      toast.success('All processed');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
+
+  const currentExam = exams.find(e => e.id === filters.examId);
+  const currentClass = classes.find(c => c.id === filters.classId);
+  const examName = currentExam?.name || 'Exam';
+  const className = currentClass?.name || 'Class';
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Marks Entry</h1>
-          <p className="text-gray-600">Enter per-question marks for selected exam, subject, and class</p>
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">Marks Entry & Results</h1>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Select Exam, Subject, and Class
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Calendar className="inline h-4 w-4 mr-1" />
-                Exam
-              </label>
-              <select
-                value={filters.examId}
-                onChange={(e) => setFilters(prev => ({ ...prev, examId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+        <div className="bg-white p-4 rounded shadow mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <select className="border p-2 rounded" value={filters.examId} onChange={e => setFilters(p => ({...p, examId: e.target.value}))}>
                 <option value="">Select Exam</option>
-                {exams.map(exam => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.name} ({new Date(exam.startDate).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <BookOpen className="inline h-4 w-4 mr-1" />
-                Subject
-              </label>
-              <select
-                value={filters.subjectId}
-                onChange={(e) => setFilters(prev => ({ ...prev, subjectId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+                {exams.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+            <select className="border p-2 rounded" value={filters.subjectId} onChange={e => setFilters(p => ({...p, subjectId: e.target.value}))}>
                 <option value="">Select Subject</option>
-                {subjects.map(subject => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}{subject.code ? ` (${subject.code})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Users className="inline h-4 w-4 mr-1" />
-                Class
-              </label>
-              <select
-                value={filters.classId}
-                onChange={(e) => setFilters(prev => ({ ...prev, classId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select className="border p-2 rounded" value={filters.classId} onChange={e => setFilters(p => ({...p, classId: e.target.value}))}>
                 <option value="">Select Class</option>
-                {classes.map(cls => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
         </div>
 
-        {configuration && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-xl font-semibold">Marks Entry</h2>
-                <p className="text-gray-600">
-                  Max: {configuration.maxMarks} • Pass: {configuration.passMarks} • Questions: {configuration.questions.length}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  placeholder="Search students..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={saveAll}
-                  disabled={saving || fetching || filteredStudents.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Save className="h-4 w-4" />
-                  {saving ? 'Saving...' : 'Save All'}
-                </button>
-              </div>
+        {/* View Mode Tabs */}
+        {configuration && !fetching && (
+          <div className="flex gap-2 mb-6 border-b">
+            <button
+              onClick={() => setViewMode('entry')}
+              className={`px-4 py-2 font-medium border-b-2 transition ${
+                viewMode === 'entry'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <BookOpen className="inline-block mr-2 h-4 w-4" />
+              Marks Entry
+            </button>
+            <button
+              onClick={() => setViewMode('gazette')}
+              className={`px-4 py-2 font-medium border-b-2 transition ${
+                viewMode === 'gazette'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FileOutput className="inline-block mr-2 h-4 w-4" />
+              Class Gazette
+            </button>
+          </div>
+        )}
+
+        {fetching && <div className="flex justify-center my-4"><Loader2 className="animate-spin text-gray-500" /></div>}
+
+        {/* Marks Entry View */}
+        {configuration && !fetching && viewMode === 'entry' && (
+          <div className="bg-white rounded shadow p-4">
+            <div className="flex justify-between mb-4">
+                <div className="font-medium">Pass: {configuration.passMarks} / {configuration.maxMarks}</div>
+                <div className="flex gap-2">
+                    <input 
+                        placeholder="Search..." 
+                        className="border p-2 rounded" 
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                    />
+                    <button onClick={saveAll} disabled={saving} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2">
+                        <Save className="w-4 h-4" /> Save All
+                    </button>
+                </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="bg-gray-50">
-                    <th className="border border-gray-200 px-4 py-3 text-left text-sm font-medium text-gray-700">Student</th>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="p-3 text-left">Student</th>
                     {configuration.questions.map(q => (
-                      <th key={q.id} className="border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">
-                        {q.label} <span className="text-xs text-gray-500">/ {q.maxMarks}</span>
+                      <th key={q.id} className="p-2 text-center min-w-20">
+                        {q.label} <div className="text-xs text-gray-500">/{q.maxMarks}</div>
                       </th>
                     ))}
-                    <th className="border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">Total</th>
-                    <th className="border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">Status</th>
-                    <th className="border border-gray-200 px-4 py-3 text-center text-sm font-medium text-gray-700">Action</th>
+                    <th className="p-3 text-center">Total</th>
+                    <th className="p-3 text-center">Action</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y">
                   {filteredStudents.map(student => (
                     <tr key={student.studentId} className="hover:bg-gray-50">
-                      <td className="border border-gray-200 px-4 py-3">
-                        <div>
-                          <div className="font-medium text-gray-900">{student.studentName}</div>
-                          <div className="text-sm text-gray-600">Adm: {student.admissionNumber}</div>
-                        </div>
+                      <td className="p-3">
+                        <div className="font-medium">{student.studentName}</div>
+                        <div className="text-xs text-gray-500">{student.admissionNumber}</div>
                       </td>
                       {student.questionMarks.map(qm => (
-                        <td key={qm.questionDefId} className="border border-gray-200 px-4 py-3 text-center">
+                        <td key={qm.questionDefId} className="p-2 text-center">
                           <input
-                            type="number"
-                            min={0}
-                            max={qm.questionDef?.maxMarks ?? 0}
                             value={qm.obtainedMarks}
-                            onChange={(e) => updateMark(student.studentId, qm.questionDefId, parseFloat(e.target.value) || 0)}
-                            className="w-20 px-2 py-1 text-center border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onFocus={e => e.target.select()}
+                            onChange={e => updateMark(student.studentId, qm.questionDefId, e.target.value)}
+                            className="w-16 p-1 text-center border rounded focus:ring-2 focus:ring-blue-500 outline-none"
                           />
-                          <div className="text-[10px] text-gray-500 mt-1">/ {qm.questionDef?.maxMarks}</div>
                         </td>
                       ))}
-                      <td className="border border-gray-200 px-4 py-3 text-center font-medium">
-                        {student.totalObtained} / {configuration.maxMarks}
+                      <td className="p-3 text-center font-bold">
+                        {student.totalObtained}
+                        <div className={`text-xs ${student.status === 'PASS' ? 'text-green-600' : 'text-red-600'}`}>
+                            {student.status}
+                        </div>
                       </td>
-                      <td className="border border-gray-200 px-4 py-3 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          student.status === 'PASS' ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'
-                        }`}>
-                          {student.status === 'PASS' ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          {student.status || '—'}
-                        </span>
-                      </td>
-                      <td className="border border-gray-200 px-4 py-3 text-center">
-                        <button
-                          onClick={() => saveStudent(student)}
-                          disabled={saving}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                          Save
+                      <td className="p-3 text-center">
+                        <button onClick={() => saveStudent(student)} disabled={saving} className="text-blue-600 hover:text-blue-800 p-2">
+                            <Save className="w-5 h-5" />
                         </button>
                       </td>
                     </tr>
@@ -387,22 +439,124 @@ export default function MarksEntryPage() {
                 </tbody>
               </table>
             </div>
-
-            {filteredStudents.length === 0 && (
-              <div className="text-center text-gray-500 py-8">
-                No students found for the selected criteria
-              </div>
-            )}
           </div>
         )}
 
-        {!configuration && filters.examId && filters.subjectId && filters.classId && !fetching && (
-          <div className="text-center text-gray-500 py-12">
-            No configuration found for the selected exam, subject, and class
+        {/* Gazette View */}
+        {configuration && !fetching && viewMode === 'gazette' && gazetteData.length > 0 && (
+          <div className="space-y-6">
+            <GazetteViewWithStudentCard 
+              data={gazetteData} 
+              examName={examName} 
+              className={className}
+              selectedStudent={selectedStudent}
+              onSelectStudent={setSelectedStudent}
+            />
           </div>
         )}
-      </div>
+
+        {configuration && !fetching && viewMode === 'gazette' && gazetteData.length === 0 && (
+          <div className="bg-white rounded shadow p-8 text-center">
+            <p className="text-gray-600">No data to display</p>
+          </div>
+        )}
     </div>
   );
 }
 
+// Gazette View Component with integrated student card modal
+function GazetteViewWithStudentCard({ data, examName, className, selectedStudent, onSelectStudent }: any) {
+  if (data.length === 0) return <div className="text-center py-10">No records found.</div>;
+
+  const subjects = data[0].subjects;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-semibold">Result Gazette: {className}</h2>
+        <button 
+          onClick={() => window.print()}
+          className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"
+        >
+          <FileOutput className="h-4 w-4" /> Print Gazette
+        </button>
+      </div>
+
+      <div className="bg-white rounded shadow overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-slate-100 border-b">
+              <th className="font-bold p-3 text-left">Roll No</th>
+              <th className="font-bold p-3 text-left">Student Name</th>
+              {subjects.map((sub: any, i: number) => (
+                <th key={i} className="text-center p-3">{sub.subjectName}</th>
+              ))}
+              <th className="text-center font-bold bg-slate-200 p-3">Total</th>
+              <th className="text-center font-bold bg-slate-200 p-3">%</th>
+              <th className="text-center font-bold bg-slate-200 p-3">Grade</th>
+              <th className="text-right p-3">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((student: any) => (
+              <tr key={student.studentId} className="border-b hover:bg-gray-50">
+                <td className="font-mono p-3">{student.admissionNo}</td>
+                <td className="font-medium p-3">{student.studentName}</td>
+                
+                {student.subjects.map((sub: any, i: number) => (
+                  <td key={i} className="text-center p-3">
+                    <span className={sub.status === 'FAIL' ? 'text-red-600 font-bold' : ''}>
+                      {sub.obtained}
+                    </span>
+                  </td>
+                ))}
+
+                <td className="text-center font-bold bg-slate-50 p-3">
+                  {student.summary.totalObtained} / {student.summary.totalMax}
+                </td>
+                <td className="text-center bg-slate-50 p-3">{student.summary.percentage}%</td>
+                <td className="text-center bg-slate-50 p-3">
+                  <span className={`px-2 py-1 rounded text-xs ${student.summary.grade === 'F' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                    {student.summary.grade}
+                  </span>
+                </td>
+                <td className="text-right p-3">
+                  <button 
+                    onClick={() => onSelectStudent(student)}
+                    className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 ml-auto"
+                  >
+                    <Eye className="h-4 w-4" /> View
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Student Card Modal */}
+      {selectedStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
+              <h3 className="text-lg font-semibold">{selectedStudent.studentName} - {examName}</h3>
+              <button 
+                onClick={() => onSelectStudent(null)}
+                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6">
+              <PrintableReportCard 
+                student={selectedStudent} 
+                examName={examName} 
+                className={className}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

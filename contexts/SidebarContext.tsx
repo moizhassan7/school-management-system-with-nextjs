@@ -2,28 +2,17 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-export interface Class {
+// 1. Define Types matching the Deep Hierarchy
+export interface ClassItem {
     id: string;
     name: string;
-    classGroupId?: string;
-    sections?: { id: string; name: string }[];
 }
 
 export interface ClassGroup {
     id: string;
     name: string;
-    classes: Class[];
-    subjectGroups: {
-        id: string;
-        name: string;
-    }[];
-    campusId: string;
-    campus?: {
-        name: string;
-        school?: {
-            name: string;
-        }
-    }
+    classes: ClassItem[]; // Now included in the School tree
+    campusId?: string;
 }
 
 export interface Campus {
@@ -32,7 +21,7 @@ export interface Campus {
     classGroups: ClassGroup[];
 }
 
-export interface SchoolWithCampuses {
+export interface SchoolWithHierarchy {
     id: string;
     name: string;
     initials: string;
@@ -40,8 +29,7 @@ export interface SchoolWithCampuses {
 }
 
 interface SidebarContextType {
-    schools: SchoolWithCampuses[];
-    classGroups: ClassGroup[];
+    schools: SchoolWithHierarchy[];
     refreshData: () => Promise<void>;
     isLoading: boolean;
 }
@@ -49,39 +37,23 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-    const [schools, setSchools] = useState<SchoolWithCampuses[]>([]);
-    const [classGroups, setClassGroups] = useState<ClassGroup[]>([]);
+    const [schools, setSchools] = useState<SchoolWithHierarchy[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const fetchSchools = async () => {
+    const refreshData = useCallback(async () => {
+        setIsLoading(true);
         try {
+            // Because we updated the API, this single call gets the whole tree
             const response = await fetch('/api/schools');
             if (response.ok) {
                 const data = await response.json();
                 setSchools(data);
             }
         } catch (error) {
-            console.error('Error fetching schools:', error);
+            console.error('Error fetching school hierarchy:', error);
+        } finally {
+            setIsLoading(false);
         }
-    };
-
-    const fetchClassGroups = async () => {
-         try {
-            // We will create this endpoint
-            const response = await fetch('/api/class-groups');
-            if (response.ok) {
-                const data = await response.json();
-                setClassGroups(data);
-            }
-        } catch (error) {
-            console.error('Error fetching class groups:', error);
-        }
-    };
-
-    const refreshData = useCallback(async () => {
-        setIsLoading(true);
-        await Promise.all([fetchSchools(), fetchClassGroups()]);
-        setIsLoading(false);
     }, []);
 
     useEffect(() => {
@@ -89,7 +61,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     }, [refreshData]);
 
     return (
-        <SidebarContext.Provider value={{ schools, classGroups, refreshData, isLoading }}>
+        <SidebarContext.Provider value={{ schools, refreshData, isLoading }}>
             {children}
         </SidebarContext.Provider>
     );

@@ -13,9 +13,12 @@ export async function GET(request: Request) {
     const parents = await prisma.parentRecord.findMany({
       where: {
         OR: [
-          { cnic: { contains: query } },
-          { user: { email: { contains: query } } },
-          { user: { phone: { contains: query } } },
+          // FIX: Added Search by Name
+          { user: { name: { contains: query, mode: 'insensitive' } } },
+          // FIX: Added mode: 'insensitive' for other fields
+          { cnic: { contains: query, mode: 'insensitive' } },
+          { user: { email: { contains: query, mode: 'insensitive' } } },
+          { user: { phone: { contains: query, mode: 'insensitive' } } },
         ],
       },
       include: {
@@ -28,6 +31,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(parents);
   } catch (error) {
+    console.error("Search Error:", error);
     return NextResponse.json({ error: 'Search failed' }, { status: 500 });
   }
 }

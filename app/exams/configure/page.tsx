@@ -38,7 +38,6 @@ interface Subject {
 interface Class {
   id: string;
   name: string;
-  academicYearId: string;
 }
 
 export default function ExamConfigurationPage() {
@@ -156,10 +155,15 @@ export default function ExamConfigurationPage() {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...formData,
+          examId: formData.examId,
+          subjectId: formData.subjectId,
+          classId: formData.classId,
+          maxMarks: formData.maxMarks,
+          passMarks: formData.passingMarks,
           questions: formData.questions.map(q => ({
-            questionNumber: q.questionNumber,
-            maxMarks: q.maxMarks
+            label: `Q${q.questionNumber}`,
+            maxMarks: q.maxMarks,
+            order: q.questionNumber
           }))
         })
       });

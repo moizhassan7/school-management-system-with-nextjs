@@ -11,7 +11,8 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { Plus, Save, ArrowRight } from 'lucide-react';
 
 export default function FinanceConfigPage() {
-  const { classGroups, schools } = useSidebar();
+  // FIX 1: We only need 'schools' now, as it contains the full tree
+  const { schools } = useSidebar();
   const [activeTab, setActiveTab] = useState("accounts");
 
   // Data States
@@ -31,14 +32,16 @@ export default function FinanceConfigPage() {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [feeStructures, setFeeStructures] = useState<Record<string, number>>({});
 
-  // --- FIX IS HERE ---
-  // Flatten classes directly from ClassGroup (New Hierarchy)
-  // Ensure we safely access .classes array
-  const allClasses = classGroups.flatMap(cg => 
-    // @ts-ignore - Context types might not be updated yet, but API sends this
-    cg.classes || [] 
+  // --- FIX 2: Derive 'allClasses' by flattening the Schools hierarchy ---
+  // School -> Campus -> ClassGroup -> Class
+  const allClasses = schools.flatMap(school => 
+    school.campuses.flatMap(campus => 
+      campus.classGroups.flatMap(group => 
+        group.classes || []
+      )
+    )
   );
-  // -------------------
+  // ---------------------------------------------------------------------
 
   // --- FETCH DATA ---
   const refreshData = () => {
@@ -243,7 +246,11 @@ export default function FinanceConfigPage() {
                 <Select onValueChange={setSelectedClassId}>
                   <SelectTrigger><SelectValue placeholder="Choose Class..." /></SelectTrigger>
                   <SelectContent>
-                    {allClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {allClasses.length > 0 ? (
+                      allClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)
+                    ) : (
+                       <SelectItem value="none" disabled>No Classes Found</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

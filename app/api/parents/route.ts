@@ -16,7 +16,7 @@ const parentSchema = z.object({
   occupation: z.string().optional(),
   cnic: z.string().optional(),
   
-  // Initial Student Link (Optional - usually we link siblings later)
+  // Initial Student Link
   studentId: z.string().optional(), 
   relationship: z.enum(['FATHER', 'MOTHER', 'GUARDIAN', 'OTHER']).optional(),
 });
@@ -28,43 +28,55 @@ export async function POST(request: Request) {
 
     const passwordHash = crypto.createHash('sha256').update(data.password).digest('hex');
 
-    // 1. Create the User and ParentRecord
-    const parentUser = await prisma.user.create({
-      data: {
-        name: data.name,
-        email: data.email,
-        passwordHash,
-        phone: data.phone,
-        address: data.address,
-        schoolId: data.schoolId,
-        // Create Parent Record inline
-        parentRecord: {
-          create: {
-            occupation: data.occupation,
-            cnic: data.cnic,
-          }
-        }
-      },
-      include: {
-        parentRecord: true
-      }
-    });
-
-    // 2. If a student ID was provided, create the Kinship link immediately
-    if (data.studentId && parentUser.parentRecord) {
-      await prisma.kinship.create({
+    // Use a transaction to ensure User and ParentRecord are created together
+    const result = await prisma.$transaction(async (tx) => {
+      
+      // 1. Create the base User
+      const user = await tx.user.create({
         data: {
-          parentId: parentUser.parentRecord.id,
-          studentId: data.studentId,
-          relationship: data.relationship || 'GUARDIAN',
-          isPrimary: true
+          name: data.name,
+          email: data.email,
+          passwordHash,
+          phone: data.phone,
+          address: data.address,
+          schoolId: data.schoolId,
+          role: 'PARENT', // Important: Explicitly set role
+        },
+      });
+
+      // 2. Explicitly create the ParentRecord
+      // We pass 'undefined' for optional fields if they are missing, which Prisma handles as NULL
+      const parentRecord = await tx.parentRecord.create({
+        data: {
+          userId: user.id,
+          occupation: data.occupation,
+          cnic: data.cnic,
         }
       });
-    }
 
-    return NextResponse.json(parentUser, { status: 201 });
+      // 3. If a student ID was provided, create the Kinship link
+      if (data.studentId) {
+        await tx.kinship.create({
+          data: {
+            parentId: parentRecord.id,
+            studentId: data.studentId,
+            relationship: data.relationship || 'GUARDIAN',
+            isPrimary: true
+          }
+        });
+      }
+
+      // Return combined data
+      return {
+        ...user,
+        parentRecord
+      };
+    });
+
+    return NextResponse.json(result, { status: 201 });
+
   } catch (error) {
-    console.error(error);
+    console.error('Create Parent Error:', error);
     return NextResponse.json({ error: 'Failed to create parent' }, { status: 500 });
   }
 }

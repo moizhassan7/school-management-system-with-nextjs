@@ -89,6 +89,9 @@ export async function POST(request: Request) {
       },
     })
 
+    // Variable to hold the student record if created
+    let studentRecord = null;
+
     if (data.student) {
       const s = data.student
       let academicYearId = s.academicYearId
@@ -114,7 +117,8 @@ export async function POST(request: Request) {
         }
       }
 
-      const record = await prisma.studentRecord.create({
+      // Capture the student record in the variable
+      studentRecord = await prisma.studentRecord.create({
         data: {
           userId: user.id,
           admissionNumber: s.admissionNumber || null,
@@ -130,7 +134,7 @@ export async function POST(request: Request) {
         await prisma.academicYearStudentRecord.create({
           data: {
             academicYearId,
-            studentRecordId: record.id,
+            studentRecordId: studentRecord.id,
             classId: s.classId || null,
             sectionId: s.sectionId || null,
           },
@@ -138,7 +142,12 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(user, { status: 201 })
+    // Return the user AND the studentRecord so the frontend can access the ID
+    return NextResponse.json({ 
+        ...user, 
+        studentRecord 
+    }, { status: 201 })
+
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ errors: error.issues }, { status: 400 })

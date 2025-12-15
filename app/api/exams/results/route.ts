@@ -54,14 +54,16 @@ export async function GET(request: NextRequest) {
     // Get all students in the class
     const students = await prisma.studentRecord.findMany({
       where: {
-        myClassId: classId
+        classId: classId
       },
-      include: {
+      select: {
+        id: true,
+        admissionNumber: true,
+        rollNumber: true,
         user: {
           select: {
             id: true,
-            name: true,
-            admissionNumber: true
+            name: true
           }
         }
       },

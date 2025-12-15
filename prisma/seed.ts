@@ -110,6 +110,108 @@ async function main() {
     console.log(`👤 Created ${u.role}: ${u.email}`);
   }
 
+  // Create Academic Year
+  const academicYear = await prisma.academicYear.upsert({
+    where: { id: 'default-academic-year' },
+    update: {},
+    create: {
+      id: 'default-academic-year',
+      startYear: '2024',
+      stopYear: '2025',
+      schoolId: school.id
+    }
+  });
+
+  console.log(`📅 Academic Year created: ${academicYear.startYear}-${academicYear.stopYear}`);
+
+  // Create Campus
+  const campus = await prisma.campus.upsert({
+    where: { id: 'default-campus' },
+    update: {},
+    create: {
+      id: 'default-campus',
+      name: 'Main Campus',
+      address: '100 Harvard St, Cambridge, MA 02138',
+      phone: '555-0123',
+      email: 'campus@harvard.edu',
+      schoolId: school.id
+    }
+  });
+
+  console.log(`🏫 Campus created: ${campus.name}`);
+
+  // Create Class Group
+  const classGroup = await prisma.classGroup.upsert({
+    where: { id: 'default-class-group' },
+    update: {},
+    create: {
+      id: 'default-class-group',
+      name: 'Primary School',
+      description: 'Grades 1-5',
+      campusId: campus.id
+    }
+  });
+
+  console.log(`📚 Class Group created: ${classGroup.name}`);
+
+  // Create Classes
+  const classes = [
+    { name: 'Grade 1' },
+    { name: 'Grade 2' },
+    { name: 'Grade 3' }
+  ];
+
+  for (const cls of classes) {
+    await prisma.class.upsert({
+      where: { id: `class-${cls.name.toLowerCase().replace(' ', '-')}` },
+      update: {},
+      create: {
+        id: `class-${cls.name.toLowerCase().replace(' ', '-')}`,
+        name: cls.name,
+        classGroupId: classGroup.id
+      }
+    });
+  }
+
+  console.log(`📖 Classes created: ${classes.map(c => c.name).join(', ')}`);
+
+  // Create Subject Group
+  const subjectGroup = await prisma.subjectGroup.upsert({
+    where: { id: 'default-subject-group' },
+    update: {},
+    create: {
+      id: 'default-subject-group',
+      name: 'Core Subjects',
+      description: 'Basic academic subjects',
+      classGroupId: classGroup.id
+    }
+  });
+
+  console.log(`📝 Subject Group created: ${subjectGroup.name}`);
+
+  // Create Subjects
+  const subjects = [
+    { name: 'Mathematics', code: 'MATH' },
+    { name: 'English', code: 'ENG' },
+    { name: 'Science', code: 'SCI' },
+    { name: 'History', code: 'HIST' }
+  ];
+
+  for (const subj of subjects) {
+    await prisma.subject.upsert({
+      where: { id: `subject-${subj.code.toLowerCase()}` },
+      update: {},
+      create: {
+        id: `subject-${subj.code.toLowerCase()}`,
+        name: subj.name,
+        code: subj.code,
+        subjectGroupId: subjectGroup.id
+      }
+    });
+  }
+
+  console.log(`📚 Subjects created: ${subjects.map(s => s.name).join(', ')}`);
+
   console.log('✅ Seeding finished.');
 }
 

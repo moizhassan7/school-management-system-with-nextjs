@@ -11,6 +11,26 @@ export async function GET(request: NextRequest) {
     }
 
     const subjects = await prisma.subject.findMany({
+      where: {
+        subjectGroup: {
+          classGroup: {
+            campus: {
+              schoolId: session.user.schoolId
+            }
+          }
+        }
+      },
+      include: {
+        subjectGroup: {
+          include: {
+            classGroup: {
+              include: {
+                campus: true
+              }
+            }
+          }
+        }
+      },
       orderBy: {
         name: 'asc'
       }

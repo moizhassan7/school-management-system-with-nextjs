@@ -33,6 +33,8 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const { userId } = await params
+    
+    // FETCH USER WITH PARENTS (KINSHIP) INCLUDED
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -44,10 +46,23 @@ export async function GET(
             },
             myClass: true,
             section: true,
+            // FIX: Ensure parents are fetched with user details
+            parents: {
+              include: {
+                parentRecord: {
+                    include: {
+                        user: {
+                            select: { id: true, name: true, phone: true, email: true }
+                        }
+                    }
+                }
+              }
+            }
           },
         },
       },
     })
+
     if (!user || user.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
@@ -56,6 +71,7 @@ export async function GET(
     }
     return NextResponse.json(user)
   } catch (error) {
+    console.error("GET User Error:", error);
     return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })
   }
 }

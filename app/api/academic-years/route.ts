@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 
-// GET /api/classes - Get all classes
+// GET /api/academic-years - Get all academic years for the school
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -10,37 +10,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const classes = await prisma.class.findMany({
+    const academicYears = await prisma.academicYear.findMany({
       where: {
-        classGroup: {
-          campus: {
-            schoolId: session.user.schoolId
-          }
-        }
-      },
-      include: {
-        classGroup: {
-          include: {
-            campus: true
-          }
-        }
+        schoolId: session.user.schoolId
       },
       orderBy: {
-        name: 'asc'
+        startYear: 'desc'
       }
     });
 
-    return NextResponse.json(classes);
+    return NextResponse.json(academicYears);
   } catch (error) {
-    console.error('Error fetching classes:', error);
+    console.error('Error fetching academic years:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch classes' },
+      { error: 'Failed to fetch academic years' },
       { status: 500 }
     );
   }
 }
 
-// POST /api/classes - Create a new class
+// POST /api/academic-years - Create a new academic year
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -49,27 +38,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, classGroupId } = body;
+    const { startYear, stopYear } = body;
 
-    if (!name || !classGroupId) {
+    if (!startYear || !stopYear) {
       return NextResponse.json(
-        { error: 'Name and class group are required' },
+        { error: 'startYear and stopYear are required' },
         { status: 400 }
       );
     }
 
-    const cls = await prisma.class.create({
+    const academicYear = await prisma.academicYear.create({
       data: {
-        name,
-        classGroupId
+        startYear,
+        stopYear,
+        schoolId: session.user.schoolId
       }
     });
 
-    return NextResponse.json(cls, { status: 201 });
+    return NextResponse.json(academicYear, { status: 201 });
   } catch (error) {
-    console.error('Error creating class:', error);
+    console.error('Error creating academic year:', error);
     return NextResponse.json(
-      { error: 'Failed to create class' },
+      { error: 'Failed to create academic year' },
       { status: 500 }
     );
   }
