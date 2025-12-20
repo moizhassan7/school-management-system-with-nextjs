@@ -80,6 +80,9 @@ export default function Sidebar({ user }: SidebarProps) {
   const isAdmin = userRole === "ADMIN" || isSuperAdmin;
   const isAccountant = userRole === "ACCOUNTANT" || isSuperAdmin;
   const isTeacher = userRole === "TEACHER" || isAdmin;
+  const isStudent = userRole === "STUDENT";
+  const isParent = userRole === "PARENT";
+  const isStaff = userRole === "STAFF";
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/login" });
@@ -91,7 +94,7 @@ export default function Sidebar({ user }: SidebarProps) {
       <div className="p-6 border-b border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
           <GraduationCap className="w-6 h-6 text-primary" />
-          <span>EduManager</span>
+          <span>School System</span>
         </div>
         <div className="mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
           {userRole.replace("_", " ")} Portal
@@ -113,29 +116,130 @@ export default function Sidebar({ user }: SidebarProps) {
           Dashboard
         </Link>
 
-        <Link
-          href="/students"
-          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            isPathActive("/students")
-              ? "bg-primary text-white"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Students
-        </Link>
+        {/* Students menu - visible for admin and teachers */}
+        {(isAdmin || isTeacher) && (
+          <Link
+            href="/students"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isPathActive("/students")
+                ? "bg-primary text-white"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Students
+          </Link>
+        )}
 
-        <Link
-          href="/staff"
-          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            isPathActive("/staff")
-              ? "bg-primary text-white"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Staff
-        </Link>
+        {/* Staff menu - visible for admin */}
+        {isAdmin && (
+          <Link
+            href="/staff"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isPathActive("/staff")
+                ? "bg-primary text-white"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Staff
+          </Link>
+        )}
+
+        {/* Student-specific menu items */}
+        {isStudent && (
+          <>
+            <Link
+              href="/student/results"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/student/results")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Award className="w-4 h-4" />
+              My Results
+            </Link>
+            <Link
+              href="/student/attendance"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/student/attendance")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              My Attendance
+            </Link>
+            <Link
+              href="/student/fees"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/student/fees")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Banknote className="w-4 h-4" />
+              Fee Status
+            </Link>
+          </>
+        )}
+
+        {/* Parent-specific menu items */}
+        {isParent && (
+          <>
+            <Link
+              href="/portal/parent"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/portal/parent")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              My Children
+            </Link>
+            <Link
+              href="/parent/fees"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/parent/fees")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Banknote className="w-4 h-4" />
+              Fee Payments
+            </Link>
+          </>
+        )}
+
+        {/* Staff-specific menu items */}
+        {isStaff && (
+          <>
+            <Link
+              href="/staff/attendance"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/staff/attendance")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              My Attendance
+            </Link>
+            <Link
+              href="/staff/leave"
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isPathActive("/staff/leave")
+                  ? "bg-primary text-white"
+                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              Leave Application
+            </Link>
+          </>
+        )}
 
         {/* --- Finance Module --- */}
         {isAccountant && (

@@ -55,10 +55,17 @@ enum Role {
   STUDENT
   PARENT
   ACCOUNTANT
+  STAFF
 }
 enum ExamType {
   TERM        // Detailed: Marks per question
   CLASS_TEST  // Simple: Total Obtained / Total Marks
+}
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
 }
 model AccountHead {
   id        String   @id @default(cuid())
@@ -88,6 +95,7 @@ model School {
   academicYears AcademicYear[]
   feeHeads  FeeHead[] // Relation to Finance
   GradeSystems GradeSystem[] // Relation to Examination
+  attendanceRecords Attendance[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,6 +153,8 @@ model Class {
   // Opposite relations for the Examination module
   examConfigurations ExamConfiguration[]
   examResults        ExamResult[]
+  subjectAssignments SubjectAssignment[]
+  attendanceRecords  Attendance[]
   // ----------------------
 
   createdAt      DateTime      @default(now())
@@ -198,6 +208,10 @@ model Section {
   myClass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
   students  StudentRecord[]
   yearRecords AcademicYearStudentRecord[]
+  classTeacherId String?
+  classTeacher   StaffRecord? @relation(fields: [classTeacherId], references: [id])
+  subjectAssignments SubjectAssignment[]
+  attendanceRecords  Attendance[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -230,7 +244,9 @@ model User {
   challans          Challan[]        // Relation to Finance
   studentDiscounts  StudentDiscount[] // Relation to Discounts
   examResults       ExamResult[]     // Relation to Examination
-
+  attendance        Attendance[]     @relation("StudentAttendance")
+  recordedAttendance Attendance[]    @relation("AttendanceRecorder")
+  staffRecord StaffRecord? // Relation to Staff
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   role Role @default(STUDENT)
@@ -262,6 +278,8 @@ model Kinship {
   @@unique([studentId, parentId])
 }
 
+
+
 model Subject {
   id          String   @id @default(cuid())
   name        String
@@ -270,6 +288,7 @@ model Subject {
   subjectGroupId String
   subjectGroup SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
   examConfigurations ExamConfiguration[]
+  subjectAssignments SubjectAssignment[]
   examResults ExamResult[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -592,4 +611,83 @@ model QuestionMark {
   updatedAt      DateTime @default(now()) @updatedAt
 
   @@unique([examResultId, questionDefId])
+}
+
+model StaffRecord {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  designation    String         // e.g. "Senior Teacher", "Admin Officer"
+  department     String?        // e.g. "Science", "Accounts"
+  qualification  String?
+  joiningDate    DateTime
+  salary         Decimal        @db.Decimal(10, 2)
+  employmentType EmploymentType @default(FULL_TIME)
+  
+  // Relations
+  sectionsIncharged Section[]   // Sections this staff is incharge of
+  assignments       SubjectAssignment[] // Classes/Subjects they teach
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+// --- ATTENDANCE MODULE ---
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  date           DateTime
+  status         AttendanceStatus
+  remarks        String?
+
+  studentId      String
+  student        User             @relation("StudentAttendance", fields: [studentId], references: [id], onDelete: Cascade)
+
+  // Context
+  classId        String
+  myClass        Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  sectionId      String
+  section        Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  schoolId       String
+  school         School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  recordedById   String?
+  recordedBy     User?            @relation("AttendanceRecorder", fields: [recordedById], references: [id])
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([studentId, date, sectionId]) // One record per student per day per section
+  @@index([date])
+  @@index([studentId])
+  @@index([sectionId])
+}
+
+model SubjectAssignment {
+  id          String      @id @default(cuid())
+  
+  teacherId   String
+  teacher     StaffRecord @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  
+  subjectId   String
+  subject     Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  
+  classId     String
+  myClass     Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  
+  sectionId   String?
+  section     Section?    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }

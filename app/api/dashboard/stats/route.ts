@@ -1,13 +1,51 @@
-import { auth } from '@/auth';
-import { redirect } from 'next/navigation';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import DashboardHeader from '@/components/dashboard-header';
-import AdminDashboard from '@/components/dashboards/admin-dashboard';
-import AccountantDashboard from '@/components/dashboards/accountant-dashboard';
-import TeacherDashboard from '@/components/dashboards/teacher-dashboard';
-import StudentDashboard from '@/components/dashboards/student-dashboard';
-import ParentDashboard from '@/components/dashboards/parent-dashboard';
-import StaffDashboard from '@/components/dashboards/staff-dashboard';
+import { auth } from '@/auth';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  try {
+    const session = await auth();
+    
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { role, schoolId, id: userId } = session.user;
+
+    // Different stats based on role
+    switch (role) {
+      case 'SUPER_ADMIN':
+      case 'ADMIN':
+        return getAdminStats(schoolId!);
+      
+      case 'ACCOUNTANT':
+        return getAccountantStats(schoolId!);
+      
+      case 'TEACHER':
+        return getTeacherStats(userId!, schoolId!);
+      
+      case 'STUDENT':
+        return getStudentStats(userId!, schoolId!);
+      
+      case 'PARENT':
+        return getParentStats(userId!, schoolId!);
+      
+      case 'STAFF':
+        return getStaffStats(userId!, schoolId!);
+      
+      default:
+        return NextResponse.json({ error: 'Invalid role' }, { status: 403 });
+    }
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch dashboard stats' },
+      { status: 500 }
+    );
+  }
+}
 
 // Admin/Super Admin Dashboard Stats
 async function getAdminStats(schoolId: string) {
@@ -17,25 +55,26 @@ async function getAdminStats(schoolId: string) {
     totalTeachers,
     unpaidInvoices,
     recentEnrollments,
+    activeAcademicYear,
     todayAttendance
   ] = await Promise.all([
     // Total Students
     prisma.studentRecord.count({
       where: { user: { schoolId, deletedAt: null } }
     }),
-
+    
     // Total Staff
     prisma.staffRecord.count({
       where: { user: { schoolId, deletedAt: null } }
     }),
-
+    
     // Total Teachers
     prisma.staffRecord.count({
-      where: {
+      where: { 
         user: { schoolId, deletedAt: null, role: 'TEACHER' }
       }
     }),
-
+    
     // Unpaid Invoices Total
     prisma.invoice.aggregate({
       where: {
@@ -47,7 +86,7 @@ async function getAdminStats(schoolId: string) {
         paidAmount: true
       }
     }),
-
+    
     // Recent Enrollments (last 7 days)
     prisma.studentRecord.count({
       where: {
@@ -57,7 +96,12 @@ async function getAdminStats(schoolId: string) {
         }
       }
     }),
-
+    
+    // Active Academic Year
+    prisma.academicYear.findFirst({
+      where: { schoolId, isActive: true }
+    }),
+    
     // Today's Attendance Summary
     prisma.attendance.groupBy({
       by: ['status'],
@@ -72,14 +116,26 @@ async function getAdminStats(schoolId: string) {
     })
   ]);
 
-  const unpaidAmount = Number(unpaidInvoices._sum.totalAmount || 0) - Number(unpaidInvoices._sum.paidAmount || 0);
-
+  const unpaidAmount = (unpaidInvoices._sum.totalAmount || 0) - (unpaidInvoices._sum.paidAmount || 0);
+  
   const attendanceStats = todayAttendance.reduce((acc, curr) => {
     acc[curr.status.toLowerCase()] = curr._count;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
-  return {
+  // Get recent activities
+  const recentActivities = await prisma.invoice.findMany({
+    where: { student: { schoolId } },
+    orderBy: { updatedAt: 'desc' },
+    take: 5,
+    include: {
+      student: {
+        select: { name: true }
+      }
+    }
+  });
+
+  return NextResponse.json({
     role: 'ADMIN',
     stats: {
       totalStudents,
@@ -88,8 +144,17 @@ async function getAdminStats(schoolId: string) {
       unpaidAmount: Number(unpaidAmount),
       recentEnrollments,
       attendanceToday: attendanceStats
-    }
-  };
+    },
+    academicYear: activeAcademicYear,
+    recentActivities: recentActivities.map(inv => ({
+      id: inv.id,
+      type: 'payment',
+      studentName: inv.student.name,
+      amount: Number(inv.totalAmount),
+      status: inv.status,
+      date: inv.updatedAt
+    }))
+  });
 }
 
 // Accountant Dashboard Stats
@@ -109,7 +174,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true }
     }),
-
+    
     // Pending Payments
     prisma.invoice.aggregate({
       where: {
@@ -118,7 +183,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true, paidAmount: true }
     }),
-
+    
     // Collected Today
     prisma.challan.aggregate({
       where: {
@@ -130,7 +195,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true }
     }),
-
+    
     // Overdue Invoices Count
     prisma.invoice.count({
       where: {
@@ -138,7 +203,7 @@ async function getAccountantStats(schoolId: string) {
         status: 'OVERDUE'
       }
     }),
-
+    
     // Recent Payments
     prisma.challan.findMany({
       where: {
@@ -153,9 +218,9 @@ async function getAccountantStats(schoolId: string) {
     })
   ]);
 
-  const pendingAmount = Number(pendingPayments._sum.totalAmount || 0) - Number(pendingPayments._sum.paidAmount || 0);
+  const pendingAmount = (pendingPayments._sum.totalAmount || 0) - (pendingPayments._sum.paidAmount || 0);
 
-  return {
+  return NextResponse.json({
     role: 'ACCOUNTANT',
     stats: {
       totalRevenue: Number(totalRevenue._sum.totalAmount || 0),
@@ -168,25 +233,21 @@ async function getAccountantStats(schoolId: string) {
       studentName: challan.student.name,
       amount: Number(challan.totalAmount),
       date: challan.updatedAt,
-      method: 'CASH' // Default method since paymentMethod is in ChallanPayment
+      method: challan.paymentMethod
     }))
-  };
+  });
 }
 
 // Teacher Dashboard Stats
 async function getTeacherStats(userId: string, schoolId: string) {
-  // Get teacher's staff record and assignments
+  // Get teacher's staff record
   const staffRecord = await prisma.staffRecord.findUnique({
     where: { userId },
     include: {
-      assignments: {
+      assignedSections: {
         include: {
-          section: {
-            include: {
-              _count: {
-                select: { students: true }
-              }
-            }
+          _count: {
+            select: { enrollments: true }
           }
         }
       }
@@ -194,7 +255,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
   });
 
   if (!staffRecord) {
-    return {
+    return NextResponse.json({ 
       role: 'TEACHER',
       stats: {
         mySections: 0,
@@ -202,21 +263,20 @@ async function getTeacherStats(userId: string, schoolId: string) {
         todayClasses: 0
       },
       sections: []
-    };
+    });
   }
 
-  const totalStudents = staffRecord.assignments.reduce(
-    (sum: number, assignment) => sum + (assignment.section?._count.students || 0),
+  const totalStudents = staffRecord.assignedSections.reduce(
+    (sum, section) => sum + section._count.enrollments, 
     0
   );
 
   // Get today's attendance for teacher's sections
-  const sectionIds = staffRecord.assignments.map(a => a.sectionId).filter((id): id is string => id !== null);
   const todayAttendance = await prisma.attendance.groupBy({
     by: ['status'],
     where: {
       schoolId,
-      sectionId: { in: sectionIds },
+      sectionId: { in: staffRecord.assignedSections.map(s => s.id) },
       date: {
         gte: new Date(new Date().setHours(0, 0, 0, 0)),
         lt: new Date(new Date().setHours(23, 59, 59, 999))
@@ -226,24 +286,24 @@ async function getTeacherStats(userId: string, schoolId: string) {
   });
 
   const attendanceStats = todayAttendance.reduce((acc, curr) => {
-    acc[curr.status.toLowerCase()] = Number(curr._count);
+    acc[curr.status.toLowerCase()] = curr._count;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
-  return {
+  return NextResponse.json({
     role: 'TEACHER',
     stats: {
-      mySections: staffRecord.assignments.length,
+      mySections: staffRecord.assignedSections.length,
       totalStudents,
-      todayClasses: staffRecord.assignments.length,
+      todayClasses: staffRecord.assignedSections.length,
       attendanceToday: attendanceStats
     },
-    sections: staffRecord.assignments.map(assignment => ({
-      id: assignment.section?.id || '',
-      name: assignment.section?.name || '',
-      studentsCount: assignment.section?._count.students || 0
+    sections: staffRecord.assignedSections.map(section => ({
+      id: section.id,
+      name: section.name,
+      studentsCount: section._count.enrollments
     }))
-  };
+  });
 }
 
 // Student Dashboard Stats
@@ -280,18 +340,18 @@ async function getStudentStats(userId: string, schoolId: string) {
   });
 
   if (!studentRecord) {
-    return {
+    return NextResponse.json({ 
       role: 'STUDENT',
       stats: {},
       message: 'Student record not found'
-    };
+    });
   }
 
   // Calculate attendance percentage
   const attendanceRecords = studentRecord.user.attendance;
   const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
-  const attendancePercentage = attendanceRecords.length > 0
-    ? (presentCount / attendanceRecords.length) * 100
+  const attendancePercentage = attendanceRecords.length > 0 
+    ? (presentCount / attendanceRecords.length) * 100 
     : 0;
 
   // Calculate pending fees
@@ -300,7 +360,7 @@ async function getStudentStats(userId: string, schoolId: string) {
     0
   );
 
-  return {
+  return NextResponse.json({
     role: 'STUDENT',
     stats: {
       className: studentRecord.myClass?.name || 'N/A',
@@ -313,11 +373,11 @@ async function getStudentStats(userId: string, schoolId: string) {
     recentResults: studentRecord.user.examResults.map(result => ({
       id: result.id,
       examName: result.exam.name,
-      percentage: 0, // Default since percentage is not in schema
-      grade: 'N/A', // Default since grade is not in schema
+      percentage: Number(result.percentage),
+      grade: result.grade,
       date: result.exam.endDate
     }))
-  };
+  });
 }
 
 // Parent Dashboard Stats
@@ -360,11 +420,11 @@ async function getParentStats(userId: string, schoolId: string) {
   });
 
   if (!parentRecord) {
-    return {
+    return NextResponse.json({ 
       role: 'PARENT',
       stats: {},
       children: []
-    };
+    });
   }
 
   // Calculate total dues and children stats
@@ -380,8 +440,8 @@ async function getParentStats(userId: string, schoolId: string) {
     // Calculate attendance
     const attendanceRecords = student.user.attendance;
     const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
-    const attendancePercentage = attendanceRecords.length > 0
-      ? (presentCount / attendanceRecords.length) * 100
+    const attendancePercentage = attendanceRecords.length > 0 
+      ? (presentCount / attendanceRecords.length) * 100 
       : 0;
 
     return {
@@ -395,20 +455,20 @@ async function getParentStats(userId: string, schoolId: string) {
       attendancePercentage: Math.round(attendancePercentage),
       recentResults: student.user.examResults.map(result => ({
         examName: result.exam.name,
-        percentage: 0, // Default since percentage is not in schema
-        grade: 'N/A' // Default since grade is not in schema
+        percentage: Number(result.percentage),
+        grade: result.grade
       }))
     };
   });
 
-  return {
+  return NextResponse.json({
     role: 'PARENT',
     stats: {
       totalChildren: children.length,
       totalDues: Number(totalDues)
     },
     children
-  };
+  });
 }
 
 // Staff Dashboard Stats
@@ -421,7 +481,7 @@ async function getStaffStats(userId: string, schoolId: string) {
   });
 
   if (!staffRecord) {
-    return {
+    return NextResponse.json({ 
       role: 'STAFF',
       stats: {
         workingDays: 0,
@@ -434,13 +494,13 @@ async function getStaffStats(userId: string, schoolId: string) {
         }
       },
       staffInfo: {}
-    };
+    });
   }
 
   // Get current month attendance
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
-
+  
   const attendanceRecords = await prisma.attendance.groupBy({
     by: ['status'],
     where: {
@@ -462,7 +522,7 @@ async function getStaffStats(userId: string, schoolId: string) {
   // Calculate working days (present + late)
   const workingDays = (attendanceStats.present || 0) + (attendanceStats.late || 0);
 
-  return {
+  return NextResponse.json({
     role: 'STAFF',
     stats: {
       workingDays,
@@ -475,97 +535,17 @@ async function getStaffStats(userId: string, schoolId: string) {
       }
     },
     staffInfo: {
-      designation: staffRecord.designation || 'N/A',
-      department: staffRecord.department || 'N/A',
-      employmentType: staffRecord.employmentType || 'N/A',
-      joinDate: staffRecord.joiningDate || new Date(),
-      phone: staffRecord.user.phone || 'N/A',
-      emergencyContact: null // Default since emergencyContactName/Phone not in schema
+      employeeId: staffRecord.employeeId,
+      designation: staffRecord.designation,
+      department: staffRecord.department,
+      employmentType: staffRecord.employmentType,
+      joinDate: staffRecord.joiningDate,
+      phone: staffRecord.user.phone,
+      emergencyContact: staffRecord.emergencyContactName && staffRecord.emergencyContactPhone ? {
+        name: staffRecord.emergencyContactName,
+        phone: staffRecord.emergencyContactPhone
+      } : null
     }
-  };
+  });
 }
 
-export default async function Dashboard() {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect('/login');
-  }
-
-  // Fetch dashboard data directly from database
-  let dashboardData;
-
-  try {
-    const { role, schoolId, id: userId } = session.user;
-
-    // Different stats based on role
-    switch (role) {
-      case 'SUPER_ADMIN':
-      case 'ADMIN':
-        dashboardData = await getAdminStats(schoolId!);
-        break;
-
-      case 'ACCOUNTANT':
-        dashboardData = await getAccountantStats(schoolId!);
-        break;
-
-      case 'TEACHER':
-        dashboardData = await getTeacherStats(userId!, schoolId!);
-        break;
-
-      case 'STUDENT':
-        dashboardData = await getStudentStats(userId!, schoolId!);
-        break;
-
-      case 'PARENT':
-        dashboardData = await getParentStats(userId!, schoolId!);
-        break;
-
-      case 'STAFF':
-        dashboardData = await getStaffStats(userId!, schoolId!);
-        break;
-
-      default:
-        dashboardData = {
-          role,
-          stats: {},
-          message: 'Invalid role'
-        };
-    }
-  } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    dashboardData = {
-      role: session.user.role,
-      stats: {},
-      message: 'Failed to load dashboard data'
-    };
-  }
-
-  const role = session.user.role;
-  const userName = session.user.name || 'User';
-  const userEmail = session.user.email || '';
-
-  return (
-    <div className="flex flex-col h-full bg-[#f6f7f8] dark:bg-[#101922]">
-      <DashboardHeader user={{ name: userName, email: userEmail, role }} />
-      
-      {/* Render role-specific dashboard */}
-      {(role === 'SUPER_ADMIN' || role === 'ADMIN') && <AdminDashboard data={dashboardData} />}
-      {role === 'ACCOUNTANT' && <AccountantDashboard data={dashboardData} />}
-      {role === 'TEACHER' && <TeacherDashboard data={dashboardData} />}
-      {role === 'STUDENT' && <StudentDashboard data={dashboardData} />}
-      {role === 'PARENT' && <ParentDashboard data={dashboardData} />}
-      {role === 'STAFF' && <StaffDashboard data={dashboardData} />}
-      
-      {/* Fallback for unknown roles */}
-      {!['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'STUDENT', 'PARENT', 'STAFF'].includes(role || '') && (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h2>
-            <p className="text-slate-500">Your role does not have access to this dashboard.</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

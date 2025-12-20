@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/sidebar";
+import LayoutWrapper from "@/components/layout-wrapper";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import { auth } from "@/auth"; 
 import { SessionProvider } from "next-auth/react";
@@ -26,12 +26,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <SessionProvider session={session}>
           <SidebarProvider>
-            <div className="flex">
-              <Sidebar user={user} />
-              <main className="flex-1">
-                {children}
-              </main>
-            </div>
+            <LayoutWrapper user={user}>
+              {children}
+            </LayoutWrapper>
           </SidebarProvider>
         </SessionProvider>
       </body>

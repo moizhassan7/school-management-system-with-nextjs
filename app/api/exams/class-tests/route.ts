@@ -10,7 +10,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const role = String(session.user.role || '');
+    let where: any = {};
+    if (role === 'TEACHER') {
+      const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
+      if (!staff) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      where.teacherId = staff.id;
+    }
+
     const tests = await prisma.classTest.findMany({
+      where,
       include: {
         subject: true,
         class: true,
@@ -69,13 +80,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Subject or class not found' }, { status: 404 });
     }
 
+    const role = String(session.user.role || '');
+    if (role === 'TEACHER') {
+      const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
+      if (!staff) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      const assignment = await prisma.subjectAssignment.findFirst({
+        where: { teacherId: staff.id, subjectId, classId }
+      });
+      if (!assignment) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     // Create the class test
     const classTest = await prisma.classTest.create({
       data: {
         name,
         subjectId,
         classId,
-        teacherId: session.user.id!,
+        teacherId: role === 'TEACHER'
+          ? (await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } }))!.id
+          : session.user.id!,
         date: new Date(date),
         totalQuestions,
         passingQuestions,

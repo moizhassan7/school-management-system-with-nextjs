@@ -22,6 +22,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const role = String(session.user.role || '');
+    if (role === 'TEACHER') {
+      const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
+      if (!staff) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      const assignment = await prisma.subjectAssignment.findFirst({
+        where: { teacherId: staff.id, subjectId, classId }
+      });
+      if (!assignment) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     // Get exam configuration
     const configuration = await prisma.examConfiguration.findUnique({
       where: {
@@ -114,13 +128,29 @@ export async function POST(request: NextRequest) {
     // (I am including a condensed version below just in case)
     try {
         const session = await auth();
-        // ... auth checks
+        if (!session?.user?.schoolId) {
+          return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
         const body = await request.json();
         const { examId, studentId, subjectId, classId, questionMarks } = body;
 
         // Validation...
         if (!examId || !studentId || !subjectId || !classId || !questionMarks) {
              return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+        }
+
+        const role = String(session.user.role || '');
+        if (role === 'TEACHER') {
+          const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
+          if (!staff) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+          }
+          const assignment = await prisma.subjectAssignment.findFirst({
+            where: { teacherId: staff.id, subjectId, classId }
+          });
+          if (!assignment) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+          }
         }
 
         const configuration = await prisma.examConfiguration.findUnique({

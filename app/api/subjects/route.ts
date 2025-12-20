@@ -10,16 +10,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const subjects = await prisma.subject.findMany({
-      where: {
-        subjectGroup: {
-          classGroup: {
-            campus: {
-              schoolId: session.user.schoolId
-            }
+    const role = String(session.user.role || '');
+    let subjectWhere: any = {
+      subjectGroup: {
+        classGroup: {
+          campus: {
+            schoolId: session.user.schoolId
           }
         }
-      },
+      }
+    };
+
+    if (role === 'TEACHER') {
+      const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
+      if (!staff) {
+        return NextResponse.json([], { status: 200 });
+      }
+      const assignments = await prisma.subjectAssignment.findMany({
+        where: { teacherId: staff.id },
+        select: { subjectId: true }
+      });
+      const subjectIds = Array.from(new Set(assignments.map(a => a.subjectId)));
+      subjectWhere = {
+        ...subjectWhere,
+        id: { in: subjectIds.length ? subjectIds : ['__none__'] }
+      };
+    }
+
+    const subjects = await prisma.subject.findMany({
+      where: subjectWhere,
       include: {
         subjectGroup: {
           include: {

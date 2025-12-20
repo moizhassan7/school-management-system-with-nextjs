@@ -19,7 +19,7 @@ export default function LoginPage() {
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-gray-900">EduManager Login</CardTitle>
+          <CardTitle className="text-2xl font-bold text-gray-900">School Login</CardTitle>
         </CardHeader>
         <CardContent>
           <form action={dispatch} className="space-y-4">

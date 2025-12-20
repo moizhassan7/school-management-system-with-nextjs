@@ -16,47 +16,6 @@ export const authConfig = {
       // Enforce authentication for all non-login pages
       if (!isLoggedIn && !isLogin) return false;
 
-      // Redirect logged-in users away from login
-      if (isLogin && isLoggedIn) {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
-      if (!isLoggedIn) return true; // allow login page
-
-      // RBAC: restrict sections by role
-      if (pathname.startsWith('/finance') && !['ACCOUNTANT', 'SUPER_ADMIN'].includes(role || '')) {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
-      if (
-        (pathname.startsWith('/users') ||
-         pathname.startsWith('/schools') ||
-         pathname.startsWith('/class-groups') ||
-         pathname.startsWith('/subject-groups') ||
-         pathname.startsWith('/classes')) &&
-        !['ADMIN', 'SUPER_ADMIN'].includes(role || '')
-      ) {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
-      if (
-        (pathname.startsWith('/students') || pathname.startsWith('/academics')) &&
-        !['TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(role || '')
-      ) {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
-      if (
-        pathname.startsWith('/exams') &&
-        !['TEACHER', 'ADMIN', 'SUPER_ADMIN'].includes(role || '')
-      ) {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
-      if (pathname.startsWith('/portal/parent') && role !== 'PARENT') {
-        return Response.redirect(new URL('/', nextUrl));
-      }
-
       return true;
     },
     // 2. Add Role to the Token
