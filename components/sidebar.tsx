@@ -606,6 +606,9 @@ export default function Sidebar({ user }: SidebarProps) {
           </button>
         </div>
       </div>
+      <div className="text-center text-xs text-slate-500 dark:text-slate-400 py-2 border-t border-slate-200 dark:border-slate-800">
+        Developed By Moiz Hassan
+      </div>
     </aside>
   );
 }
