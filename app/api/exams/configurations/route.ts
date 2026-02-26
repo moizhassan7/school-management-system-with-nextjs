@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
-            results: true
+            // results: true (Removed because results are linked to Exam, not ExamConfiguration)
           }
         }
       },
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(configuration, { status: 201 });
   } catch (error) {
     console.error('Error creating exam configuration:', error);
-    if (error.code === 'P2002') {
+    if (error instanceof Error && (error as any).code === 'P2002') {
       return NextResponse.json(
         { error: 'Exam configuration already exists for this exam, subject, and class' },
         { status: 400 }

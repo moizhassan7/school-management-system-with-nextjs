@@ -19,7 +19,23 @@ export async function GET(request: Request) {
     let studentRecord = null;
 
     if (invoice) {
-      studentRecord = invoice.student.studentRecord;
+      studentRecord = await prisma.studentRecord.findUnique({
+        where: { userId: invoice.studentId },
+        include: {
+          user: true,
+          myClass: true,
+          section: true,
+          parents: {
+            include: {
+              parentRecord: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
+        }
+      });
     } else {
       studentRecord = await prisma.studentRecord.findFirst({
         where: {
@@ -57,7 +73,7 @@ export async function GET(request: Request) {
       },
       include: {
         payments: {  // <--- NEW: Include payment history
-            orderBy: { date: 'desc' }
+          orderBy: { date: 'desc' }
         }
       },
       orderBy: { dueDate: 'asc' }

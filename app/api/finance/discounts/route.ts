@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         value: data.value,
         type: data.type,
         feeHeadId: data.feeHeadId,
-        schoolId: role === 'SUPER_ADMIN' ? data.schoolId : schoolId,
+        schoolId: role === 'SUPER_ADMIN' ? data.schoolId : (schoolId as string),
       }
     });
     return NextResponse.json(discount, { status: 201 });

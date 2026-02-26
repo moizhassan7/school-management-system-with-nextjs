@@ -103,12 +103,12 @@ export default function GradingSystemsPage() {
     }
 
     try {
-      const url = editingSystem 
+      const url = editingSystem
         ? `/api/exams/grading-systems/${editingSystem}`
         : '/api/exams/grading-systems';
-      
+
       const method = editingSystem ? 'PUT' : 'POST';
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -188,7 +188,7 @@ export default function GradingSystemsPage() {
   const updateGradeRange = (index: number, field: keyof GradeRange, value: any) => {
     setFormData(prev => ({
       ...prev,
-      ranges: prev.ranges.map((range, i) => 
+      ranges: prev.ranges.map((range, i) =>
         i === index ? { ...range, [field]: value } : range
       )
     }));
@@ -383,10 +383,10 @@ export default function GradingSystemsPage() {
                   </div>
                 ))}
               </div>
-              {system._count?.classGroups > 0 && (
+              {(system._count?.classGroups ?? 0) > 0 && (
                 <div className="mt-4 pt-4 border-t">
                   <Badge variant="secondary">
-                    Used by {system._count.classGroups} class group{system._count.classGroups !== 1 ? 's' : ''}
+                    Used by {system._count?.classGroups || 0} class group{system._count?.classGroups !== 1 ? 's' : ''}
                   </Badge>
                 </div>
               )}

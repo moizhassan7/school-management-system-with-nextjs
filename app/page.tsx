@@ -444,18 +444,18 @@ async function getStaffStats(userId: string, schoolId: string) {
   const attendanceRecords = await prisma.attendance.groupBy({
     by: ['status'],
     where: {
-      userId,
+      studentId: userId,
       schoolId,
       date: {
         gte: startOfMonth,
         lte: endOfMonth
       }
     },
-    _count: true
+    _count: { status: true }
   });
 
   const attendanceStats = attendanceRecords.reduce((acc, curr) => {
-    acc[curr.status.toLowerCase()] = curr._count;
+    acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
@@ -548,7 +548,7 @@ export default async function Dashboard() {
   return (
     <div className="flex flex-col h-full bg-[#f6f7f8] dark:bg-[#101922]">
       <DashboardHeader user={{ name: userName, email: userEmail, role }} />
-      
+
       {/* Render role-specific dashboard */}
       {(role === 'SUPER_ADMIN' || role === 'ADMIN') && <AdminDashboard data={dashboardData} />}
       {role === 'ACCOUNTANT' && <AccountantDashboard data={dashboardData} />}
@@ -556,7 +556,7 @@ export default async function Dashboard() {
       {role === 'STUDENT' && <StudentDashboard data={dashboardData} />}
       {role === 'PARENT' && <ParentDashboard data={dashboardData} />}
       {role === 'STAFF' && <StaffDashboard data={dashboardData} />}
-      
+
       {/* Fallback for unknown roles */}
       {!['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'STUDENT', 'PARENT', 'STAFF'].includes(role || '') && (
         <div className="flex-1 flex items-center justify-center p-8">

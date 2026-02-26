@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const session = await auth();
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -19,22 +19,22 @@ export async function GET() {
       case 'SUPER_ADMIN':
       case 'ADMIN':
         return getAdminStats(schoolId!);
-      
+
       case 'ACCOUNTANT':
         return getAccountantStats(schoolId!);
-      
+
       case 'TEACHER':
         return getTeacherStats(userId!, schoolId!);
-      
+
       case 'STUDENT':
         return getStudentStats(userId!, schoolId!);
-      
+
       case 'PARENT':
         return getParentStats(userId!, schoolId!);
-      
+
       case 'STAFF':
         return getStaffStats(userId!, schoolId!);
-      
+
       default:
         return NextResponse.json({ error: 'Invalid role' }, { status: 403 });
     }
@@ -62,19 +62,19 @@ async function getAdminStats(schoolId: string) {
     prisma.studentRecord.count({
       where: { user: { schoolId, deletedAt: null } }
     }),
-    
+
     // Total Staff
     prisma.staffRecord.count({
       where: { user: { schoolId, deletedAt: null } }
     }),
-    
+
     // Total Teachers
     prisma.staffRecord.count({
-      where: { 
+      where: {
         user: { schoolId, deletedAt: null, role: 'TEACHER' }
       }
     }),
-    
+
     // Unpaid Invoices Total
     prisma.invoice.aggregate({
       where: {
@@ -86,7 +86,7 @@ async function getAdminStats(schoolId: string) {
         paidAmount: true
       }
     }),
-    
+
     // Recent Enrollments (last 7 days)
     prisma.studentRecord.count({
       where: {
@@ -96,13 +96,13 @@ async function getAdminStats(schoolId: string) {
         }
       }
     }),
-    
+
     // Active Academic Year
     prisma.academicYear.findFirst({
       where: { schoolId },
       orderBy: { createdAt: 'desc' }
     }),
-    
+
     // Today's Attendance Summary
     prisma.attendance.groupBy({
       by: ['status'],
@@ -113,16 +113,16 @@ async function getAdminStats(schoolId: string) {
           lt: new Date(new Date().setHours(23, 59, 59, 999))
         }
       },
-      _count: true
+      _count: { status: true }
     })
   ]);
 
   const unpaidAmount =
     Number(unpaidInvoices._sum.totalAmount || 0) -
     Number(unpaidInvoices._sum.paidAmount || 0);
-  
+
   const attendanceStats = todayAttendance.reduce((acc, curr) => {
-    acc[curr.status.toLowerCase()] = curr._count;
+    acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
@@ -177,7 +177,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true }
     }),
-    
+
     // Pending Payments
     prisma.invoice.aggregate({
       where: {
@@ -186,7 +186,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true, paidAmount: true }
     }),
-    
+
     // Collected Today
     prisma.challan.aggregate({
       where: {
@@ -198,7 +198,7 @@ async function getAccountantStats(schoolId: string) {
       },
       _sum: { totalAmount: true }
     }),
-    
+
     // Overdue Invoices Count
     prisma.invoice.count({
       where: {
@@ -206,7 +206,7 @@ async function getAccountantStats(schoolId: string) {
         status: 'OVERDUE'
       }
     }),
-    
+
     // Recent Payments
     prisma.challan.findMany({
       where: {
@@ -265,7 +265,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
   });
 
   if (!staffRecord) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       role: 'TEACHER',
       stats: {
         mySections: 0,
@@ -277,7 +277,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
   }
 
   const totalStudents = staffRecord.sectionsIncharged.reduce(
-    (sum, section) => sum + section._count.students, 
+    (sum, section) => sum + section._count.students,
     0
   );
 
@@ -292,11 +292,11 @@ async function getTeacherStats(userId: string, schoolId: string) {
         lt: new Date(new Date().setHours(23, 59, 59, 999))
       }
     },
-    _count: true
+    _count: { status: true }
   });
 
   const attendanceStats = todayAttendance.reduce((acc, curr) => {
-    acc[curr.status.toLowerCase()] = curr._count;
+    acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
@@ -350,7 +350,7 @@ async function getStudentStats(userId: string, schoolId: string) {
   });
 
   if (!studentRecord) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       role: 'STUDENT',
       stats: {},
       message: 'Student record not found'
@@ -360,8 +360,8 @@ async function getStudentStats(userId: string, schoolId: string) {
   // Calculate attendance percentage
   const attendanceRecords = studentRecord.user.attendance;
   const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
-  const attendancePercentage = attendanceRecords.length > 0 
-    ? (presentCount / attendanceRecords.length) * 100 
+  const attendancePercentage = attendanceRecords.length > 0
+    ? (presentCount / attendanceRecords.length) * 100
     : 0;
 
   // Calculate pending fees
@@ -430,7 +430,7 @@ async function getParentStats(userId: string, schoolId: string) {
   });
 
   if (!parentRecord) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       role: 'PARENT',
       stats: {},
       children: []
@@ -450,8 +450,8 @@ async function getParentStats(userId: string, schoolId: string) {
     // Calculate attendance
     const attendanceRecords = student.user.attendance;
     const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
-    const attendancePercentage = attendanceRecords.length > 0 
-      ? (presentCount / attendanceRecords.length) * 100 
+    const attendancePercentage = attendanceRecords.length > 0
+      ? (presentCount / attendanceRecords.length) * 100
       : 0;
 
     return {
@@ -491,7 +491,7 @@ async function getStaffStats(userId: string, schoolId: string) {
   });
 
   if (!staffRecord) {
-    return NextResponse.json({ 
+    return NextResponse.json({
       role: 'STAFF',
       stats: {
         workingDays: 0,
@@ -510,22 +510,22 @@ async function getStaffStats(userId: string, schoolId: string) {
   // Get current month attendance
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
-  
+
   const attendanceRecords = await prisma.attendance.groupBy({
     by: ['status'],
     where: {
-      userId,
+      studentId: userId,
       schoolId,
       date: {
         gte: startOfMonth,
         lte: endOfMonth
       }
     },
-    _count: true
+    _count: { status: true }
   });
 
   const attendanceStats = attendanceRecords.reduce((acc, curr) => {
-    acc[curr.status.toLowerCase()] = curr._count;
+    acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
 
@@ -545,16 +545,13 @@ async function getStaffStats(userId: string, schoolId: string) {
       }
     },
     staffInfo: {
-      employeeId: staffRecord.employeeId,
+      employeeId: staffRecord.id,
       designation: staffRecord.designation,
       department: staffRecord.department,
       employmentType: staffRecord.employmentType,
       joinDate: staffRecord.joiningDate,
-      phone: staffRecord.user.phone,
-      emergencyContact: staffRecord.emergencyContactName && staffRecord.emergencyContactPhone ? {
-        name: staffRecord.emergencyContactName,
-        phone: staffRecord.emergencyContactPhone
-      } : null
+      phone: staffRecord.user?.phone || null,
+      emergencyContact: null
     }
   });
 }

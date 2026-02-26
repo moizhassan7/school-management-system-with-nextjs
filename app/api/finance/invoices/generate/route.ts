@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
         // 3. Fetch Active Students in Class (with their discounts)
         const students = await prisma.studentRecord.findMany({
-            where: { 
+            where: {
                 classId: classId,
                 // Add logic here to exclude graduated/left students if you have a status field
             },
@@ -81,15 +81,15 @@ export async function POST(request: Request) {
         });
 
         if (existingCount > 0) {
-            return NextResponse.json({ 
-                error: `Invoices for ${month}/${year} already exist for some students in this class.` 
+            return NextResponse.json({
+                error: `Invoices for ${month}/${year} already exist for some students in this class.`
             }, { status: 409 });
         }
 
         // 5. Prepare Bulk Transactions
         const invoiceOperations = students.map(record => {
             const student = record.user;
-            
+
             // Calculate Items & Discounts for this specific student
             const sourceFeeItems = record.feeStructure?.items?.length
                 ? record.feeStructure.items.map((item) => ({
@@ -103,15 +103,15 @@ export async function POST(request: Request) {
 
             const invoiceItemsData = sourceFeeItems.map((sourceItem) => {
                 const originalAmount = Number(sourceItem.amount);
-                
+
                 // Find matching discount for this Fee Head
                 // @ts-ignore
                 const activeDiscount = student.studentDiscounts.find(
                     (sd: any) => sd.discount.feeHeadId === sourceItem.feeHeadId
                 );
 
-                const discountVal = activeDiscount 
-                    ? calculateDiscount(originalAmount, activeDiscount.discount) 
+                const discountVal = activeDiscount
+                    ? calculateDiscount(originalAmount, activeDiscount.discount)
                     : 0;
 
                 // Ensure we don't discount below zero
@@ -158,9 +158,9 @@ export async function POST(request: Request) {
         // 6. Execute Transaction
         await prisma.$transaction(invoiceOperations);
 
-        return NextResponse.json({ 
-            success: true, 
-            message: `Successfully generated ${invoiceOperations.length} invoices.` 
+        return NextResponse.json({
+            success: true,
+            message: `Successfully generated ${invoiceOperations.length} invoices.`
         });
 
     } catch (error) {

@@ -125,8 +125,8 @@ export async function GET(request: NextRequest) {
 
     // Process results for each student
     const studentsWithResults = students.map(student => {
-      const studentResults = results.filter(r => r.studentId === student.userId);
-      
+      const studentResults = results.filter(r => r.studentId === student.user.id);
+
       const subjectsData = subjects.map(subject => {
         const result = studentResults.find(r => r.subjectId === subject.id);
         const cfg = configBySubject.get(subject.id);
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
           maxMarks,
           passMarks,
           status: result?.status || 'NOT_ENTERED',
-          grade: result?.grade || null
+          grade: null
         };
       });
 
@@ -159,9 +159,9 @@ export async function GET(request: NextRequest) {
       }
 
       return {
-        studentId: student.userId,
+        studentId: student.user.id,
         studentName: student.user.name,
-        admissionNo: student.user.admissionNumber,
+        admissionNo: student.admissionNumber || '',
         subjects: subjectsData,
         summary: {
           totalObtained,
@@ -175,17 +175,17 @@ export async function GET(request: NextRequest) {
     // Calculate class statistics
     const classStats = {
       totalStudents: students.length,
-      studentsWithResults: studentsWithResults.filter(s => 
+      studentsWithResults: studentsWithResults.filter(s =>
         s.subjects.some(sub => sub.status !== 'NOT_ENTERED')
       ).length,
-      passCount: studentsWithResults.filter(s => 
+      passCount: studentsWithResults.filter(s =>
         s.subjects.every(sub => sub.status === 'PASS' || sub.status === 'NOT_ENTERED')
       ).length,
-      failCount: studentsWithResults.filter(s => 
+      failCount: studentsWithResults.filter(s =>
         s.subjects.some(sub => sub.status === 'FAIL')
       ).length,
-      averagePercentage: studentsWithResults.length > 0 
-        ? studentsWithResults.reduce((sum, s) => sum + s.summary.percentage, 0) / studentsWithResults.length 
+      averagePercentage: studentsWithResults.length > 0
+        ? studentsWithResults.reduce((sum, s) => sum + s.summary.percentage, 0) / studentsWithResults.length
         : 0
     };
 

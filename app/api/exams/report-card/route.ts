@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            admissionNumber: true,
             profilePath: true
           }
         },
@@ -44,9 +43,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    if (!student) {
+    if (!student || !student.myClass) {
       return NextResponse.json(
-        { error: 'Student not found' },
+        { error: 'Student or class not found' },
         { status: 404 }
       );
     }
@@ -128,7 +127,7 @@ export async function GET(request: NextRequest) {
       const maxMarks = cfg?.maxMarks ?? 100;
       const passMarks = cfg?.passMarks ?? Math.round(maxMarks * 0.4);
       const percentage = result ? (result.marksObtained / maxMarks) * 100 : 0;
-      
+
       let grade = null;
       if (classGroup?.gradeSystem && result) {
         const gradeRange = classGroup.gradeSystem.ranges.find(
@@ -209,7 +208,7 @@ export async function GET(request: NextRequest) {
       student: {
         id: student.user.id,
         name: student.user.name,
-        admissionNumber: student.user.admissionNumber,
+        admissionNumber: student.admissionNumber,
         profilePath: student.user.profilePath,
         class: student.myClass.name,
         section: student.section?.name || null,

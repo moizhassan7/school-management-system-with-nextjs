@@ -11,34 +11,62 @@ export async function GET(request: NextRequest) {
     }
 
     const role = String(session.user.role || '');
-    let where: any = {};
+    let teacherFilter: any = {};
     if (role === 'TEACHER') {
       const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
       if (!staff) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
-      where.teacherId = staff.id;
+      teacherFilter = {
+        configurations: {
+          some: {
+            myClass: {
+              subjectAssignments: {
+                some: { teacherId: staff.id }
+              }
+            }
+          }
+        }
+      };
     }
 
-    const tests = await prisma.classTest.findMany({
-      where,
+    const exams = await prisma.exam.findMany({
+      where: {
+        schoolId: session.user.schoolId!,
+        type: 'CLASS_TEST',
+        ...teacherFilter
+      },
       include: {
-        subject: true,
-        class: true,
-        teacher: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
+        configurations: {
+          include: {
+            subject: true,
+            myClass: true
           }
         }
       },
       orderBy: {
-        date: 'desc'
+        startDate: 'desc'
       }
     });
 
-    return NextResponse.json(tests);
+    const mappedTests = exams.map(exam => {
+      const config = exam.configurations[0];
+      return {
+        id: exam.id,
+        name: exam.name,
+        subjectId: config?.subjectId,
+        classId: config?.classId,
+        date: exam.startDate,
+        totalQuestions: config?.maxMarks || 0,
+        passingQuestions: config?.passMarks || 0,
+        description: null,
+        subject: config?.subject,
+        class: config?.myClass,
+        teacher: null
+      };
+    });
+
+    return NextResponse.json(mappedTests);
   } catch (error) {
     console.error('Error fetching class tests:', error);
     return NextResponse.json({ error: 'Failed to fetch class tests' }, { status: 500 });
@@ -49,7 +77,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user) {
+    if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -94,34 +122,59 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create the class test
-    const classTest = await prisma.classTest.create({
+    const activeYear = await prisma.academicYear.findFirst({
+      where: { schoolId: session.user.schoolId! },
+      orderBy: { startYear: 'desc' }
+    });
+
+    if (!activeYear) {
+      return NextResponse.json({ error: 'No active academic year found' }, { status: 400 });
+    }
+
+    // Create the Exam instead of classTest
+    const exam = await prisma.exam.create({
       data: {
         name,
-        subjectId,
-        classId,
-        teacherId: role === 'TEACHER'
-          ? (await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } }))!.id
-          : session.user.id!,
-        date: new Date(date),
-        totalQuestions,
-        passingQuestions,
-        description
+        type: 'CLASS_TEST',
+        startDate: new Date(date),
+        endDate: new Date(date),
+        academicYearId: activeYear.id,
+        schoolId: session.user.schoolId!,
+        configurations: {
+          create: {
+            subjectId,
+            classId,
+            maxMarks: totalQuestions,
+            passMarks: passingQuestions
+          }
+        }
       },
       include: {
-        subject: true,
-        class: true,
-        teacher: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
+        configurations: {
+          include: {
+            subject: true,
+            myClass: true
           }
         }
       }
     });
 
-    return NextResponse.json(classTest, { status: 201 });
+    const config = exam.configurations[0];
+    const mappedResponse = {
+      id: exam.id,
+      name: exam.name,
+      subjectId: config.subjectId,
+      classId: config.classId,
+      date: exam.startDate,
+      totalQuestions: config.maxMarks,
+      passingQuestions: config.passMarks,
+      description: null,
+      subject: config.subject,
+      class: config.myClass,
+      teacher: null
+    };
+
+    return NextResponse.json(mappedResponse, { status: 201 });
   } catch (error) {
     console.error('Error creating class test:', error);
     return NextResponse.json({ error: 'Failed to create class test' }, { status: 500 });

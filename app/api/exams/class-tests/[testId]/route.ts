@@ -15,26 +15,38 @@ export async function GET(
 
     const { testId } = await params;
 
-    const classTest = await prisma.classTest.findUnique({
+    const exam = await prisma.exam.findUnique({
       where: { id: testId },
       include: {
-        subject: true,
-        class: true,
-        teacher: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
+        configurations: {
+          include: {
+            subject: true,
+            myClass: true
           }
         }
       }
     });
 
-    if (!classTest) {
+    if (!exam || exam.type !== 'CLASS_TEST') {
       return NextResponse.json({ error: 'Class test not found' }, { status: 404 });
     }
 
-    return NextResponse.json(classTest);
+    const config = exam.configurations[0];
+    const mappedTest = {
+      id: exam.id,
+      name: exam.name,
+      subjectId: config?.subjectId,
+      classId: config?.classId,
+      date: exam.startDate,
+      totalQuestions: config?.maxMarks || 0,
+      passingQuestions: config?.passMarks || 0,
+      description: null,
+      subject: config?.subject,
+      class: config?.myClass,
+      teacher: null
+    };
+
+    return NextResponse.json(mappedTest);
   } catch (error) {
     console.error('Error fetching class test:', error);
     return NextResponse.json({ error: 'Failed to fetch class test' }, { status: 500 });
@@ -80,32 +92,62 @@ export async function PUT(
       return NextResponse.json({ error: 'Subject or class not found' }, { status: 404 });
     }
 
+    const existingExam = await prisma.exam.findUnique({
+      where: { id: testId },
+      include: { configurations: true }
+    });
+
+    if (!existingExam || existingExam.type !== 'CLASS_TEST') {
+      return NextResponse.json({ error: 'Class test not found' }, { status: 404 });
+    }
+
+    const configId = existingExam.configurations[0]?.id;
+
     // Update the class test
-    const classTest = await prisma.classTest.update({
+    const updatedExam = await prisma.exam.update({
       where: { id: testId },
       data: {
         name,
-        subjectId,
-        classId,
-        date: new Date(date),
-        totalQuestions,
-        passingQuestions,
-        description
+        startDate: new Date(date),
+        endDate: new Date(date),
+        configurations: {
+          update: configId ? {
+            where: { id: configId },
+            data: {
+              subjectId,
+              classId,
+              maxMarks: totalQuestions,
+              passMarks: passingQuestions
+            }
+          } : undefined
+        }
       },
       include: {
-        subject: true,
-        class: true,
-        teacher: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
+        configurations: {
+          include: {
+            subject: true,
+            myClass: true
           }
         }
       }
     });
 
-    return NextResponse.json(classTest);
+    const config = updatedExam.configurations[0];
+    const mappedResponse = {
+      id: updatedExam.id,
+      name: updatedExam.name,
+      subjectId: config?.subjectId,
+      classId: config?.classId,
+      date: updatedExam.startDate,
+      totalQuestions: config?.maxMarks || 0,
+      passingQuestions: config?.passMarks || 0,
+      description: null,
+      subject: config?.subject,
+      class: config?.myClass,
+      teacher: null
+    };
+
+    return NextResponse.json(mappedResponse);
   } catch (error) {
     console.error('Error updating class test:', error);
     return NextResponse.json({ error: 'Failed to update class test' }, { status: 500 });
@@ -126,18 +168,18 @@ export async function DELETE(
     const { testId } = await params;
 
     // Check if there are any results for this test
-    const resultsCount = await prisma.classTestResult.count({
-      where: { classTestId: testId }
+    const resultsCount = await prisma.examResult.count({
+      where: { examId: testId }
     });
 
     if (resultsCount > 0) {
-      return NextResponse.json({ 
-        error: 'Cannot delete class test with existing results. Please delete all results first.' 
+      return NextResponse.json({
+        error: 'Cannot delete class test with existing results. Please delete all results first.'
       }, { status: 400 });
     }
 
     // Delete the class test
-    await prisma.classTest.delete({
+    await prisma.exam.delete({
       where: { id: testId }
     });
 

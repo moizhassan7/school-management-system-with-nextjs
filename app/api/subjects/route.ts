@@ -74,11 +74,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, subjectGroupId, description } = body;
 
-    if (!name || !code) {
+    if (!name || !subjectGroupId) {
       return NextResponse.json(
-        { error: 'Name and code are required' },
+        { error: 'Name and subjectGroupId are required' },
         { status: 400 }
       );
     }
@@ -86,7 +86,9 @@ export async function POST(request: NextRequest) {
     const subject = await prisma.subject.create({
       data: {
         name,
-        code
+        code,
+        subjectGroupId,
+        description
       }
     });
 

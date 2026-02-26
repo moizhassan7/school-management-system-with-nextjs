@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation';
 export default async function AttendancePage() {
   const session = await auth();
 
-  if (!session || !session.user) {
+  if (!session || !session.user || !session.user.id) {
     redirect('/login');
   }
 

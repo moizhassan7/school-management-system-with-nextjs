@@ -40,23 +40,26 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
   const [inchargeClassId, setInchargeClassId] = useState<string>('');
   const [inchargeSections, setInchargeSections] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Assignment State
-  const [assignments, setAssignments] = useState<{subjectId: string, classId: string, sectionId?: string}[]>([]);
+  const [assignments, setAssignments] = useState<{ subjectId: string, classId: string, sectionId?: string }[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
-      role: initialData?.user?.role || 'TEACHER',
-      employmentType: initialData?.employmentType || 'FULL_TIME',
+      role: (initialData?.user?.role as "TEACHER" | "STAFF" | "ACCOUNTANT" | "ADMIN") || 'TEACHER',
+      employmentType: (initialData?.employmentType as "FULL_TIME" | "PART_TIME" | "CONTRACT" | "INTERN") || 'FULL_TIME',
       joiningDate: initialData?.joiningDate ? String(initialData.joiningDate).slice(0, 10) : new Date().toISOString().split('T')[0],
       assignments: [],
       name: initialData?.user?.name || '',
       email: initialData?.user?.email || '',
+      password: '',
       phone: initialData?.user?.phone || '',
       designation: initialData?.designation || '',
       department: initialData?.department || '',
-      qualification: initialData?.qualification || ''
+      qualification: initialData?.qualification || '',
+      salary: initialData?.salary ? Number(initialData.salary) : 0,
+      inchargeSectionId: initialData?.sectionsIncharged?.[0]?.id || ''
     }
   });
 
@@ -75,7 +78,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
       }));
       setAssignments(arr);
       const uniq = Array.from(new Set(arr.map((a: any) => a.classId)));
-      Promise.all(uniq.map(cid => fetchSectionsForClass(cid))).then(() => {});
+      Promise.all(uniq.map(cid => fetchSectionsForClass(cid as string))).then(() => { });
     }
     if (initialData?.sectionsIncharged?.length) {
       const s = initialData.sectionsIncharged[0];
@@ -115,7 +118,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
     setIsSubmitting(true);
     try {
       const payload = { ...values, assignments }; // Merge manual assignments state
-      
+
       const endpoint = staffId ? `/api/staff/${staffId}` : '/api/staff';
       const method = staffId ? 'PUT' : 'POST';
       const res = await fetch(endpoint, {
@@ -139,7 +142,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <h2 className="text-xl font-bold">Add New Staff / Teacher</h2>
-        
+
         {/* Personal Info */}
         <div className="grid grid-cols-2 gap-4">
           <FormField control={form.control} name="name" render={({ field }) => (
@@ -175,20 +178,20 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
               <FormMessage />
             </FormItem>
           )} />
-          
+
           <FormField control={form.control} name="designation" render={({ field }) => (
             <FormItem><FormLabel>Designation</FormLabel><FormControl><Input placeholder="e.g. Senior Teacher" {...field} /></FormControl><FormMessage /></FormItem>
           )} />
-          
+
           <FormField control={form.control} name="salary" render={({ field }) => (
             <FormItem><FormLabel>Salary</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
           )} />
-          
+
           <FormField control={form.control} name="joiningDate" render={({ field }) => (
             <FormItem><FormLabel>Joining Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
           )} />
 
-           <FormField control={form.control} name="employmentType" render={({ field }) => (
+          <FormField control={form.control} name="employmentType" render={({ field }) => (
             <FormItem>
               <FormLabel>Employment Type</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -216,7 +219,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
         {form.watch('role') === 'TEACHER' && (
           <div className="space-y-4 border p-4 rounded-lg bg-slate-50">
             <h3 className="font-semibold flex items-center gap-2">Teacher Assignments</h3>
-            
+
             {/* Assignments List */}
             {assignments.map((assign, idx) => (
               <div key={idx} className="flex gap-2 items-end">
@@ -254,7 +257,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
                 </Button>
               </div>
             ))}
-            
+
             <Button type="button" variant="outline" size="sm" onClick={addAssignment} className="w-full border-dashed">
               <Plus className="h-4 w-4 mr-2" /> Add Subject Assignment
             </Button>

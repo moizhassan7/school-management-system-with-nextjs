@@ -96,7 +96,7 @@ export default function InvoiceDetailPage() {
           invoice={invoice}
           student={invoice.student}
           schoolName={schoolInfo?.name || 'Harvard School Sargodha'}
-          schoolAddress={schoolInfo?.address}
+          schoolAddress={(schoolInfo as any)?.address}
         />
       </div>
     </div>

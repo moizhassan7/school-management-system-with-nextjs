@@ -63,7 +63,7 @@ export async function GET(
         },
         _count: {
           select: {
-            results: true
+            // results: true (Removed because results are linked to Exam, not ExamConfiguration)
           }
         }
       }

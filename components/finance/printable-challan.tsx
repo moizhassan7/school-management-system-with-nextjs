@@ -74,7 +74,7 @@ const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { t
                     </tr>
                 </thead>
                 <tbody>
-                    {normalizedRows.map((row) => (
+                    {normalizedRows.map((row: any) => (
                         <tr key={row.key} className="border-b border-black/50">
                             <td className="py-1 px-1 text-center border-r border-black">{row.sr}</td>
                             <td className="py-1 px-1 border-r border-black">{row.name}</td>
@@ -104,12 +104,12 @@ const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { t
                     <p>* This FeeSlip Will Be Expire On20th Of each Month</p>
                 </div>
                 <div className="text-center pt-1">
-                    <Barcode 
-                        value={invoice.invoiceNo} 
+                    <Barcode
+                        value={invoice.invoiceNo}
                         width={0.95}
                         height={24}
                         fontSize={7}
-                        displayValue={true} 
+                        displayValue={true}
                         margin={0}
                     />
                 </div>
