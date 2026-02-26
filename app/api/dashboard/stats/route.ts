@@ -121,7 +121,7 @@ async function getAdminStats(schoolId: string) {
     Number(unpaidInvoices._sum.totalAmount || 0) -
     Number(unpaidInvoices._sum.paidAmount || 0);
 
-  const attendanceStats = todayAttendance.reduce((acc, curr) => {
+  const attendanceStats = todayAttendance.reduce((acc: Record<string, number>, curr: any) => {
     acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
@@ -277,7 +277,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
   }
 
   const totalStudents = staffRecord.sectionsIncharged.reduce(
-    (sum, section) => sum + section._count.students,
+    (sum: number, section: any) => sum + section._count.students,
     0
   );
 
@@ -295,7 +295,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
     _count: { status: true }
   });
 
-  const attendanceStats = todayAttendance.reduce((acc, curr) => {
+  const attendanceStats = todayAttendance.reduce((acc: Record<string, number>, curr: any) => {
     acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
@@ -366,7 +366,7 @@ async function getStudentStats(userId: string, schoolId: string) {
 
   // Calculate pending fees
   const pendingFees = studentRecord.user.invoices.reduce(
-    (sum, inv) => sum + (Number(inv.totalAmount) - Number(inv.paidAmount)),
+    (sum: number, inv: any) => sum + (Number(inv.totalAmount) - Number(inv.paidAmount)),
     0
   );
 
@@ -442,7 +442,7 @@ async function getParentStats(userId: string, schoolId: string) {
   const children = parentRecord.students.map(kinship => {
     const student = kinship.studentRecord;
     const dues = student.user.invoices.reduce(
-      (sum, inv) => sum + (Number(inv.totalAmount) - Number(inv.paidAmount)),
+      (sum: number, inv: any) => sum + (Number(inv.totalAmount) - Number(inv.paidAmount)),
       0
     );
     totalDues += dues;
@@ -524,7 +524,7 @@ async function getStaffStats(userId: string, schoolId: string) {
     _count: { status: true }
   });
 
-  const attendanceStats = attendanceRecords.reduce((acc, curr) => {
+  const attendanceStats = attendanceRecords.reduce((acc: Record<string, number>, curr: any) => {
     acc[curr.status.toLowerCase()] = curr._count.status;
     return acc;
   }, { present: 0, absent: 0, late: 0, excused: 0 } as Record<string, number>);
