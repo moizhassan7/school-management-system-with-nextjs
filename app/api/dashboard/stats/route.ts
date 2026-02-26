@@ -149,7 +149,7 @@ async function getAdminStats(schoolId: string) {
       attendanceToday: attendanceStats
     },
     academicYear: activeAcademicYear,
-    recentActivities: recentActivities.map(inv => ({
+    recentActivities: recentActivities.map((inv: any) => ({
       id: inv.id,
       type: 'payment',
       studentName: inv.student.name,
@@ -238,7 +238,7 @@ async function getAccountantStats(schoolId: string) {
       collectedToday: Number(collectedToday._sum.totalAmount || 0),
       overdueInvoices
     },
-    recentPayments: recentPayments.map(challan => ({
+    recentPayments: recentPayments.map((challan: any) => ({
       id: challan.id,
       studentName: challan.student.name,
       amount: Number(challan.totalAmount),
@@ -286,7 +286,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
     by: ['status'],
     where: {
       schoolId,
-      sectionId: { in: staffRecord.sectionsIncharged.map(s => s.id) },
+      sectionId: { in: staffRecord.sectionsIncharged.map((s: any) => s.id) },
       date: {
         gte: new Date(new Date().setHours(0, 0, 0, 0)),
         lt: new Date(new Date().setHours(23, 59, 59, 999))
@@ -308,7 +308,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
       todayClasses: staffRecord.sectionsIncharged.length,
       attendanceToday: attendanceStats
     },
-    sections: staffRecord.sectionsIncharged.map(section => ({
+    sections: staffRecord.sectionsIncharged.map((section: any) => ({
       id: section.id,
       name: section.name,
       studentsCount: section._count.students
@@ -359,7 +359,7 @@ async function getStudentStats(userId: string, schoolId: string) {
 
   // Calculate attendance percentage
   const attendanceRecords = studentRecord.user.attendance;
-  const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
+  const presentCount = attendanceRecords.filter((a: any) => a.status === 'PRESENT').length;
   const attendancePercentage = attendanceRecords.length > 0
     ? (presentCount / attendanceRecords.length) * 100
     : 0;
@@ -380,7 +380,7 @@ async function getStudentStats(userId: string, schoolId: string) {
       pendingFees: Number(pendingFees),
       totalExams: studentRecord.user.examResults.length
     },
-    recentResults: studentRecord.user.examResults.map(result => ({
+    recentResults: studentRecord.user.examResults.map((result: any) => ({
       id: result.id,
       examName: result.exam.name,
       percentage: Number(result.marksObtained),
@@ -439,7 +439,7 @@ async function getParentStats(userId: string, schoolId: string) {
 
   // Calculate total dues and children stats
   let totalDues = 0;
-  const children = parentRecord.students.map(kinship => {
+  const children = parentRecord.students.map((kinship: any) => {
     const student = kinship.studentRecord;
     const dues = student.user.invoices.reduce(
       (sum: number, inv: any) => sum + (Number(inv.totalAmount) - Number(inv.paidAmount)),
@@ -449,7 +449,7 @@ async function getParentStats(userId: string, schoolId: string) {
 
     // Calculate attendance
     const attendanceRecords = student.user.attendance;
-    const presentCount = attendanceRecords.filter(a => a.status === 'PRESENT').length;
+    const presentCount = attendanceRecords.filter((a: any) => a.status === 'PRESENT').length;
     const attendancePercentage = attendanceRecords.length > 0
       ? (presentCount / attendanceRecords.length) * 100
       : 0;
@@ -463,7 +463,7 @@ async function getParentStats(userId: string, schoolId: string) {
       admissionNumber: student.admissionNumber,
       pendingFees: Number(dues),
       attendancePercentage: Math.round(attendancePercentage),
-      recentResults: student.user.examResults.map(result => ({
+      recentResults: student.user.examResults.map((result: any) => ({
         examName: result.exam.name,
         percentage: Number(result.marksObtained),
         grade: result.status || 'N/A'
