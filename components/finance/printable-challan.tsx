@@ -7,78 +7,131 @@ interface ChallanProps {
     invoice: any;
     student: any;
     schoolName: string;
+    schoolAddress?: string;
 }
 
-// Single Copy Component
-const ChallanCopy = ({ title, invoice, student, schoolName }: { title: string } & ChallanProps) => {
+const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { title: string } & ChallanProps) => {
+    const billingDate = format(new Date(invoice.year, invoice.month - 1), 'MMMM yyyy');
+    const total = Number(invoice.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    const normalizedRows = items.map((item: any, index: number) => ({
+        key: item.id || `${item.feeHeadId || 'item'}-${index}`,
+        sr: index + 1,
+        name: item.feeHead?.name || 'Fee Head',
+        amount: Number(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }),
+    }));
+    while (normalizedRows.length < 11) {
+        normalizedRows.push({
+            key: `blank-${normalizedRows.length}`,
+            sr: normalizedRows.length + 1,
+            name: '',
+            amount: '',
+        });
+    }
+
+    const guardianName =
+        student?.fatherName ||
+        student?.studentRecord?.fatherName ||
+        student?.studentRecord?.parents?.find((p: any) => p.relationship === 'FATHER')?.parentRecord?.user?.name ||
+        student?.studentRecord?.parents?.[0]?.parentRecord?.user?.name ||
+        '-';
+
     return (
-        <div className="border-2 border-gray-800 p-4 text-xs w-[32%] h-full flex flex-col justify-between bg-white text-black">
-            <div className="text-center border-b-2 border-gray-400 pb-2 mb-2">
-                <h2 className="font-bold text-lg uppercase tracking-wider">{schoolName}</h2>
-                <p className="text-[10px] font-semibold">Fee Challan - {title} Copy</p>
+        <div className="challan-copy relative border border-black bg-white text-black text-[11px] leading-tight flex h-full flex-col">
+            <div className="border-b border-black px-1.5 py-1 text-center">
+                <p className="font-bold text-[11px]">{schoolName}</p>
+                <p className="text-[9px]">{schoolAddress || 'Officer Colony Faisalabad Road Sargodha'}</p>
+                <p className="font-bold text-[10px] mt-1">Bank Al-Habib</p>
+                <p className="text-[9px]">Queens Road Branch Sargodha</p>
+                <p className="text-[9px]">Acc. No:0284-0981-008444-01-9</p>
+                <p className="font-bold text-[10px] mt-1">{title} Copy</p>
             </div>
 
-            <div className="space-y-1.5 mb-4">
-                <div className="flex justify-between"><span>Challan No:</span> <span className="font-bold font-mono">{invoice.invoiceNo}</span></div>
-                <div className="flex justify-between"><span>Due Date:</span> <span>{format(new Date(invoice.dueDate), 'dd-MMM-yyyy')}</span></div>
-                <div className="flex justify-between"><span>Billing Month:</span> <span className="uppercase font-medium">{format(new Date(0, invoice.month - 1), 'MMMM yyyy')}</span></div>
+            <div className="grid grid-cols-2 border-b border-black">
+                <div className="px-1 py-1 border-r border-black"><span className="font-semibold">Slip No.</span> <span className="ml-1">{invoice.invoiceNo?.slice(-10) || '-'}</span></div>
+                <div className="px-1 py-1"><span className="font-semibold">Roll No.</span> <span className="ml-1">{student.studentRecord?.rollNumber || student.studentRecord?.admissionNumber || 'N/A'}</span></div>
             </div>
 
-            <div className="space-y-1.5 mb-4 border-b border-gray-400 pb-2">
-                <div className="flex justify-between"><span>Roll No:</span> <span className="font-medium">{student.studentRecord?.rollNumber || 'N/A'}</span></div>
-                <div className="flex justify-between"><span>Name:</span> <span className="font-bold">{student.name}</span></div>
-                <div className="flex justify-between"><span>Class:</span> <span>{student.studentRecord?.myClass?.name || 'N/A'}</span></div>
+            <div className="grid grid-cols-2 border-b border-black">
+                <div className="px-1 py-1 border-r border-black"><span className="font-semibold">Name</span> <span className="ml-1">{student.name}</span></div>
+                <div className="px-1 py-1"><span className="font-semibold">S/O, D/O</span> <span className="ml-1">{guardianName}</span></div>
+            </div>
+            <div className="grid grid-cols-2 border-b border-black">
+                <div className="px-1 py-1 border-r border-black"><span className="font-semibold">Class</span> <span className="ml-1">{student.studentRecord?.myClass?.name || 'N/A'}</span></div>
+                <div className="px-1 py-1"><span className="font-semibold">Section</span> <span className="ml-1">{student.studentRecord?.section?.name || 'A'}</span></div>
+            </div>
+            <div className="grid grid-cols-2 border-b border-black">
+                <div className="px-1 py-1 border-r border-black"><span className="font-semibold">Month</span> <span className="ml-1">{billingDate}</span></div>
+                <div className="px-1 py-1"><span className="font-semibold">Due Date</span> <span className="ml-1">{format(new Date(invoice.dueDate), 'dd-MMM-yyyy')}</span></div>
             </div>
 
-            <table className="w-full mb-4">
+            <table className="w-full text-[10px] relative z-10 border-collapse">
                 <thead>
-                    <tr className="border-b border-gray-800 text-left">
-                        <th className="py-1">Description</th>
-                        <th className="text-right py-1">Amount</th>
+                    <tr className="border-b border-black">
+                        <th className="py-1 px-1 text-center w-8 border-r border-black">Sr.</th>
+                        <th className="py-1 px-1 text-left border-r border-black">Particulars</th>
+                        <th className="py-1 px-1 text-right w-20">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {invoice.items.map((item: any) => (
-                        <tr key={item.id} className="border-b border-gray-100">
-                            <td className="py-1">{item.feeHead.name}</td>
-                            <td className="text-right py-1">{Number(item.amount).toFixed(2)}</td>
+                    {normalizedRows.map((row) => (
+                        <tr key={row.key} className="border-b border-black/50">
+                            <td className="py-1 px-1 text-center border-r border-black">{row.sr}</td>
+                            <td className="py-1 px-1 border-r border-black">{row.name}</td>
+                            <td className="text-right py-1 px-1">{row.amount}</td>
                         </tr>
                     ))}
                 </tbody>
                 <tfoot>
-                    <tr className="border-t-2 border-gray-800 font-bold text-sm">
-                        <td className="pt-2">Total Payable</td>
-                        <td className="text-right pt-2">{Number(invoice.totalAmount).toFixed(2)}</td>
+                    <tr className="font-bold border-t border-black">
+                        <td colSpan={2} className="py-1 px-1 border-r border-black">Total Payable (within due date)</td>
+                        <td className="text-right py-1 px-1">{total}</td>
                     </tr>
                 </tfoot>
             </table>
 
-            <div className="text-center mt-auto flex flex-col items-center">
-                {/* Barcode Component */}
-                <div className="max-w-full overflow-hidden">
+            <img
+                src="/logo/logo.png"
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 m-auto mt-40 h-60 w-60 object-contain opacity-[0.5] pointer-events-none"
+            />
+
+            <div className="border-t border-black p-2 space-y-1">
+                <div className="text-[9px] leading-tight space-y-0.5">
+                    <p>* A fine of 5% of fees will be charged after due date.</p>
+                    <p>* A surcharge will be levied after due date.</p>
+                    <p>* This FeeSlip Will Be Expire On20th Of each Month</p>
+                </div>
+                <div className="text-center pt-1">
                     <Barcode 
                         value={invoice.invoiceNo} 
-                        width={1.2}
-                        height={35}
-                        fontSize={12}
+                        width={0.95}
+                        height={24}
+                        fontSize={7}
                         displayValue={true} 
                         margin={0}
                     />
                 </div>
-                <p className="mt-4 text-[10px] text-gray-500">Generated by School System</p>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="text-center border-t border-black pt-1 text-[9px]">Depositor</div>
+                    <div className="text-center border-t border-black pt-1 text-[9px]">Officer</div>
+                </div>
             </div>
         </div>
     );
 };
 
-export default function PrintableChallan({ invoice, student, schoolName }: ChallanProps) {
+export default function PrintableChallan({ invoice, student, schoolName, schoolAddress }: ChallanProps) {
     if (!invoice || !student) return null;
 
     return (
-        <div className="w-full bg-white p-4 hidden print:flex flex-row justify-between gap-4 h-full min-h-[200mm]">
-            <ChallanCopy title="Bank" invoice={invoice} student={student} schoolName={schoolName} />
-            <ChallanCopy title="School" invoice={invoice} student={student} schoolName={schoolName} />
-            <ChallanCopy title="Student" invoice={invoice} student={student} schoolName={schoolName} />
+        <div className="challan-sheet w-full bg-white">
+            <div className="challan-sheet-grid grid h-full grid-cols-3 gap-[2px]">
+                <ChallanCopy title="Bank" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
+                <ChallanCopy title="School" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
+                <ChallanCopy title="Student" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
+            </div>
         </div>
     );
 }

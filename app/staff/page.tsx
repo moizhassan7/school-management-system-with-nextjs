@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 export default function StaffPage() {
   const [staff, setStaff] = useState<any[]>([]);
@@ -111,7 +112,10 @@ export default function StaffPage() {
                   variant="destructive"
                   size="sm"
                   onClick={async () => {
-                    if (!member.user.id) return alert('Invalid staff member');
+                    if (!member.user.id) {
+                      toast.error('Invalid staff member');
+                      return;
+                    }
                     if (!confirm('Soft delete this staff member?')) return;
                     const res = await fetch(`/api/staff/${member.user.id}`, { method: 'DELETE' });
                     if (res.ok) fetchStaff();

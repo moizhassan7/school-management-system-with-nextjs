@@ -163,3 +163,54 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 3mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  /* Print only challan content to avoid sidebar/forms in preview */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .challan-print-root,
+  .challan-print-root * {
+    visibility: visible !important;
+  }
+
+  .challan-print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .challan-sheet {
+    width: 291mm;
+    height: 204mm;
+    padding: 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .challan-sheet-grid {
+    height: 100%;
+  }
+
+  .challan-copy {
+    height: 100%;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

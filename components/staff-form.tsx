@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 
 // Define schema matching the API
 const formSchema = z.object({
@@ -127,7 +128,7 @@ export default function StaffForm({ onSuccess, initialData, staffId }: { onSucce
         onSuccess();
       } else {
         const err = await res.json().catch(() => ({} as any));
-        alert(err?.error || "Failed to create staff");
+        toast.error(err?.error || "Failed to create staff");
       }
     } finally {
       setIsSubmitting(false);

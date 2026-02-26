@@ -99,7 +99,8 @@ async function getAdminStats(schoolId: string) {
     
     // Active Academic Year
     prisma.academicYear.findFirst({
-      where: { schoolId, isActive: true }
+      where: { schoolId },
+      orderBy: { createdAt: 'desc' }
     }),
     
     // Today's Attendance Summary
@@ -116,7 +117,9 @@ async function getAdminStats(schoolId: string) {
     })
   ]);
 
-  const unpaidAmount = (unpaidInvoices._sum.totalAmount || 0) - (unpaidInvoices._sum.paidAmount || 0);
+  const unpaidAmount =
+    Number(unpaidInvoices._sum.totalAmount || 0) -
+    Number(unpaidInvoices._sum.paidAmount || 0);
   
   const attendanceStats = todayAttendance.reduce((acc, curr) => {
     acc[curr.status.toLowerCase()] = curr._count;
@@ -213,12 +216,19 @@ async function getAccountantStats(schoolId: string) {
       orderBy: { updatedAt: 'desc' },
       take: 10,
       include: {
-        student: { select: { name: true } }
+        student: { select: { name: true } },
+        payments: {
+          select: { method: true },
+          orderBy: { date: 'desc' },
+          take: 1
+        }
       }
     })
   ]);
 
-  const pendingAmount = (pendingPayments._sum.totalAmount || 0) - (pendingPayments._sum.paidAmount || 0);
+  const pendingAmount =
+    Number(pendingPayments._sum.totalAmount || 0) -
+    Number(pendingPayments._sum.paidAmount || 0);
 
   return NextResponse.json({
     role: 'ACCOUNTANT',
@@ -233,7 +243,7 @@ async function getAccountantStats(schoolId: string) {
       studentName: challan.student.name,
       amount: Number(challan.totalAmount),
       date: challan.updatedAt,
-      method: challan.paymentMethod
+      method: challan.payments[0]?.method || 'CASH'
     }))
   });
 }
@@ -244,10 +254,10 @@ async function getTeacherStats(userId: string, schoolId: string) {
   const staffRecord = await prisma.staffRecord.findUnique({
     where: { userId },
     include: {
-      assignedSections: {
+      sectionsIncharged: {
         include: {
           _count: {
-            select: { enrollments: true }
+            select: { students: true }
           }
         }
       }
@@ -266,8 +276,8 @@ async function getTeacherStats(userId: string, schoolId: string) {
     });
   }
 
-  const totalStudents = staffRecord.assignedSections.reduce(
-    (sum, section) => sum + section._count.enrollments, 
+  const totalStudents = staffRecord.sectionsIncharged.reduce(
+    (sum, section) => sum + section._count.students, 
     0
   );
 
@@ -276,7 +286,7 @@ async function getTeacherStats(userId: string, schoolId: string) {
     by: ['status'],
     where: {
       schoolId,
-      sectionId: { in: staffRecord.assignedSections.map(s => s.id) },
+      sectionId: { in: staffRecord.sectionsIncharged.map(s => s.id) },
       date: {
         gte: new Date(new Date().setHours(0, 0, 0, 0)),
         lt: new Date(new Date().setHours(23, 59, 59, 999))
@@ -293,15 +303,15 @@ async function getTeacherStats(userId: string, schoolId: string) {
   return NextResponse.json({
     role: 'TEACHER',
     stats: {
-      mySections: staffRecord.assignedSections.length,
+      mySections: staffRecord.sectionsIncharged.length,
       totalStudents,
-      todayClasses: staffRecord.assignedSections.length,
+      todayClasses: staffRecord.sectionsIncharged.length,
       attendanceToday: attendanceStats
     },
-    sections: staffRecord.assignedSections.map(section => ({
+    sections: staffRecord.sectionsIncharged.map(section => ({
       id: section.id,
       name: section.name,
-      studentsCount: section._count.enrollments
+      studentsCount: section._count.students
     }))
   });
 }
@@ -373,8 +383,8 @@ async function getStudentStats(userId: string, schoolId: string) {
     recentResults: studentRecord.user.examResults.map(result => ({
       id: result.id,
       examName: result.exam.name,
-      percentage: Number(result.percentage),
-      grade: result.grade,
+      percentage: Number(result.marksObtained),
+      grade: result.status || 'N/A',
       date: result.exam.endDate
     }))
   });
@@ -455,8 +465,8 @@ async function getParentStats(userId: string, schoolId: string) {
       attendancePercentage: Math.round(attendancePercentage),
       recentResults: student.user.examResults.map(result => ({
         examName: result.exam.name,
-        percentage: Number(result.percentage),
-        grade: result.grade
+        percentage: Number(result.marksObtained),
+        grade: result.status || 'N/A'
       }))
     };
   });

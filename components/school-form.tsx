@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
+import { toast } from 'sonner';
 
 const schoolSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -120,7 +121,7 @@ export default function SchoolForm() {
                 setErrors(fieldErrors);
             } else {
                 console.error(error);
-                alert(error instanceof Error ? error.message : 'An error occurred. Please try again.');
+                toast.error(error instanceof Error ? error.message : 'An error occurred. Please try again.');
             }
         } finally {
             setIsSubmitting(false);

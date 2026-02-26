@@ -27,6 +27,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { toast } from 'sonner';
 
 const generateSchema = z.object({
     schoolId: z.string().min(1, "School is required"),
@@ -125,10 +126,10 @@ export default function GenerateInvoicesPage() {
                 throw new Error(result.error || 'Failed');
             }
 
-            alert(result.message);
+            toast.success(result.message);
             router.push('/finance/invoices'); 
         } catch (error) {
-            alert(error instanceof Error ? error.message : 'Error');
+            toast.error(error instanceof Error ? error.message : 'Error');
         } finally {
             setIsSubmitting(false);
         }

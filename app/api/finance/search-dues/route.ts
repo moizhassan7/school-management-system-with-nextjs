@@ -28,7 +28,20 @@ export async function GET(request: Request) {
             { user: { name: { contains: query, mode: 'insensitive' } } }
           ]
         },
-        include: { user: true, myClass: true, section: true }
+        include: {
+          user: true,
+          myClass: true,
+          section: true,
+          parents: {
+            include: {
+              parentRecord: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
+        }
       });
     }
 
@@ -53,6 +66,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       id: studentRecord.userId,
       name: studentRecord.user.name,
+      gender: studentRecord.user.gender,
+      fatherName:
+        studentRecord.parents?.find((parent: any) => parent.relationship === 'FATHER')?.parentRecord?.user?.name ||
+        studentRecord.parents?.[0]?.parentRecord?.user?.name ||
+        '',
       admissionNumber: studentRecord.admissionNumber,
       className: `${studentRecord.myClass?.name || 'No Class'} ${studentRecord.section ? `(${studentRecord.section.name})` : ''}`,
       invoices: invoices,

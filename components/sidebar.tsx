@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
 import { useSidebar } from "@/contexts/SidebarContext";
 import {
   LayoutDashboard,
-  GraduationCap,
   Users,
   Banknote,
   Calendar,
@@ -92,9 +92,16 @@ export default function Sidebar({ user }: SidebarProps) {
     <aside className="w-64 bg-white dark:bg-[#1a2632] border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-20 transition-colors duration-200">
       {/* 1. Brand / Header */}
       <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
-          <GraduationCap className="w-6 h-6 text-primary" />
-          <span>School System</span>
+        <div className="flex items-center gap-3 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
+          <Image
+            src="/logo/logo.png"
+            alt="Harvard School Sargodha Logo"
+            width={28}
+            height={28}
+            className="h-7 w-7 object-contain"
+            priority
+          />
+          <span>Harvard School</span>
         </div>
         <div className="mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
           {userRole.replace("_", " ")} Portal

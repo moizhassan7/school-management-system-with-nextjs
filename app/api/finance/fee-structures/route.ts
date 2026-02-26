@@ -7,7 +7,7 @@ export async function GET(req: Request) {
   const role = session?.user?.role;
   const schoolId = session?.user?.schoolId;
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!['ACCOUNTANT', 'SUPER_ADMIN'].includes(String(role))) {
+  if (!['ACCOUNTANT', 'ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const { searchParams } = new URL(req.url);
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const role = session?.user?.role;
   const schoolId = session?.user?.schoolId;
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!['ACCOUNTANT', 'SUPER_ADMIN'].includes(String(role))) {
+  if (!['ACCOUNTANT', 'ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   const body = await req.json();

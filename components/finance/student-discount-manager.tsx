@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 
 interface StudentDiscountManagerProps {
     studentId: string;
@@ -68,7 +69,7 @@ export default function StudentDiscountManager({ studentId, studentName }: Stude
                 await loadData(); // Refresh list
                 setSelectedDiscount('');
             } else {
-                alert("Failed to assign discount");
+                toast.error("Failed to assign discount");
             }
         } finally {
             setIsSubmitting(false);

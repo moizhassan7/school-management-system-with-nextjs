@@ -6,6 +6,7 @@ import { z, ZodIssue } from 'zod'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 const schema = z.object({
   name: z.string().min(1),
@@ -120,7 +121,7 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
         })
         setErrors(fieldErrors)
       } else {
-        alert(err instanceof Error ? err.message : 'Error')
+        toast.error(err instanceof Error ? err.message : 'Error')
       }
     } finally {
       setIsSubmitting(false)

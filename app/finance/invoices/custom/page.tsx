@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useSidebar } from '@/contexts/SidebarContext';
 import PrintableChallan from '@/components/finance/printable-challan';
+import { toast } from 'sonner';
 
 export default function CustomChallanPage() {
     const { schools } = useSidebar();
@@ -29,6 +30,36 @@ export default function CustomChallanPage() {
         fetch('/api/finance/fee-heads').then(res => res.json()).then(setFeeHeads);
     }, []);
 
+    const loadStudentFeeItems = async (studentId: string) => {
+        try {
+            const res = await fetch(`/api/students/${studentId}/fee-structure`);
+            if (!res.ok) {
+                setItems([{ feeHeadId: '', amount: '' }]);
+                return;
+            }
+
+            const data = await res.json();
+            const sourceItems =
+                data?.currentFeeStructure?.items?.length
+                    ? data.currentFeeStructure.items
+                    : data?.classDefaults || [];
+
+            const normalizedItems = sourceItems.map((item: any) => ({
+                feeHeadId: item.feeHeadId,
+                amount: String(Number(item.amount || 0)),
+            }));
+
+            if (normalizedItems.length > 0) {
+                setItems(normalizedItems);
+            } else {
+                setItems([{ feeHeadId: '', amount: '' }]);
+                toast.info('No fee structure found for this student. Add fee heads manually.');
+            }
+        } catch {
+            setItems([{ feeHeadId: '', amount: '' }]);
+        }
+    };
+
     const handleSearch = async () => {
         if (!searchQuery) return;
         setIsSearching(true);
@@ -39,15 +70,19 @@ export default function CustomChallanPage() {
                 setStudent({ 
                     name: data.name, 
                     id: data.id, 
+                    fatherName: data.fatherName || '',
+                    gender: data.gender || 'UNSPECIFIED',
                     studentRecord: { 
                         rollNumber: data.admissionNumber, 
                         myClass: { name: data.className } // Ensure structure matches PrintableChallan
                     } 
                 }); 
+                await loadStudentFeeItems(data.id);
                 setGeneratedInvoice(null); // Reset preview on new search
             } else {
-                alert("Student not found");
+                toast.error("Student not found");
                 setStudent(null);
+                setItems([{ feeHeadId: '', amount: '' }]);
             }
         } finally {
             setIsSearching(false);
@@ -60,9 +95,11 @@ export default function CustomChallanPage() {
         // Validation
         const validItems = items.filter(i => i.feeHeadId && i.amount);
         if (validItems.length === 0) {
-            alert("Please add at least one fee item.");
+            toast.error("Please add at least one fee item.");
             return;
         }
+
+        const payloadItems = [...validItems];
 
         setLoading(true);
         try {
@@ -76,7 +113,7 @@ export default function CustomChallanPage() {
                     year: new Date().getFullYear(),
                     dueDate: new Date().toISOString(),
                     cancelInvoiceNo: cancelInvoiceNo.trim() || undefined, // Send barcode if exists
-                    items: validItems.map(i => ({ feeHeadId: i.feeHeadId, amount: i.amount }))
+                    items: payloadItems.map(i => ({ feeHeadId: i.feeHeadId, amount: i.amount }))
                 })
             });
             
@@ -86,11 +123,10 @@ export default function CustomChallanPage() {
                 // Construct the preview object manually to avoid another fetch
                 const printObj = {
                     ...invoice,
-                    items: validItems.map(i => ({
-                        id: Math.random().toString(), // Dummy ID for key
-                        feeHead: feeHeads.find(f => f.id === i.feeHeadId),
-                        amount: i.amount
-                    }))
+                    items: (invoice.items || []).map((item: any) => ({
+                        ...item,
+                        feeHead: item.feeHead || feeHeads.find(f => f.id === item.feeHeadId),
+                    })),
                 };
                 
                 setGeneratedInvoice(printObj);
@@ -98,18 +134,18 @@ export default function CustomChallanPage() {
                 setCancelInvoiceNo('');
             } else {
                 const err = await res.json();
-                alert(`Error: ${err.error}`);
+                toast.error(err.error || 'Failed to generate challan');
             }
         } catch (error) {
             console.error(error);
-            alert("Failed to generate");
+            toast.error("Failed to generate");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="container mx-auto py-10 px-4 space-y-6">
+        <div className="container mx-auto py-10 px-4 space-y-6 challan-page-root">
             <div className="flex justify-between items-center print:hidden">
                 <h1 className="text-3xl font-bold">Generate Custom Challan</h1>
             </div>
@@ -136,7 +172,7 @@ export default function CustomChallanPage() {
                                     <p className="font-bold text-lg">{student.name}</p>
                                     <p className="text-sm opacity-80">{student.studentRecord.rollNumber} • {student.studentRecord.myClass.name}</p>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => { setStudent(null); setGeneratedInvoice(null); }}>
+                                <Button variant="ghost" size="sm" onClick={() => { setStudent(null); setGeneratedInvoice(null); setItems([{ feeHeadId: '', amount: '' }]); }}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -215,18 +251,19 @@ export default function CustomChallanPage() {
 
             {/* Print Preview Area */}
             {generatedInvoice && (
-                <div className="mt-8 animate-in fade-in slide-in-from-bottom-4">
+                <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 challan-print-root">
                     <div className="flex justify-between items-center mb-4 print:hidden">
                         <h2 className="text-xl font-bold flex items-center gap-2">
                             <Printer className="h-5 w-5" /> Ready to Print
                         </h2>
                         <Button onClick={() => window.print()}>Print Now</Button>
                     </div>
-                    <div className="border p-4 bg-white shadow-sm overflow-auto">
+                    <div className="border bg-white shadow-sm overflow-x-auto print:border-0 print:shadow-none print:overflow-visible">
                         <PrintableChallan 
                             invoice={generatedInvoice} 
                             student={student} 
-                            schoolName={schools[0]?.name || "School Name"} 
+                            schoolName={schools[0]?.name || "School Name"}
+                            schoolAddress={schools[0]?.address}
                         />
                     </div>
                 </div>

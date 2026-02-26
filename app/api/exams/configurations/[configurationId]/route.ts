@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 // GET /api/exams/configurations/[configurationId] - Get specific exam configuration
 export async function GET(
   request: NextRequest,
-  { params }: { params: { configurationId: string } }
+  { params }: { params: Promise<{ configurationId: string }> }
 ) {
   try {
     const session = await auth();
@@ -13,9 +13,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { configurationId } = await params;
+
     const configuration = await prisma.examConfiguration.findUnique({
       where: {
-        id: params.configurationId
+        id: configurationId
       },
       include: {
         exam: {
@@ -87,13 +89,15 @@ export async function GET(
 // PUT /api/exams/configurations/[configurationId] - Update exam configuration
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { configurationId: string } }
+  { params }: { params: Promise<{ configurationId: string }> }
 ) {
   try {
     const session = await auth();
     if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const { configurationId } = await params;
 
     const body = await request.json();
     const { maxMarks, passMarks, questions } = body;
@@ -116,15 +120,15 @@ export async function PUT(
     const resultCount = await prisma.examResult.count({
       where: {
         examId: (await prisma.examConfiguration.findUnique({
-          where: { id: params.configurationId },
+          where: { id: configurationId },
           select: { examId: true }
         }))?.examId || '',
         subjectId: (await prisma.examConfiguration.findUnique({
-          where: { id: params.configurationId },
+          where: { id: configurationId },
           select: { subjectId: true }
         }))?.subjectId || '',
         classId: (await prisma.examConfiguration.findUnique({
-          where: { id: params.configurationId },
+          where: { id: configurationId },
           select: { classId: true }
         }))?.classId || ''
       }
@@ -164,7 +168,7 @@ export async function PUT(
       if (questions && questions.length > 0) {
         await tx.questionDefinition.deleteMany({
           where: {
-            examConfigId: params.configurationId
+            examConfigId: configurationId
           }
         });
       }
@@ -172,7 +176,7 @@ export async function PUT(
       // Update configuration
       return await tx.examConfiguration.update({
         where: {
-          id: params.configurationId
+          id: configurationId
         },
         data: {
           maxMarks,
@@ -227,7 +231,7 @@ export async function PUT(
 // DELETE /api/exams/configurations/[configurationId] - Delete exam configuration
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { configurationId: string } }
+  { params }: { params: Promise<{ configurationId: string }> }
 ) {
   try {
     const session = await auth();
@@ -235,9 +239,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { configurationId } = await params;
+
     // Check if configuration has existing results
     const config = await prisma.examConfiguration.findUnique({
-      where: { id: params.configurationId },
+      where: { id: configurationId },
       select: { examId: true, subjectId: true, classId: true }
     });
 
@@ -265,7 +271,7 @@ export async function DELETE(
 
     await prisma.examConfiguration.delete({
       where: {
-        id: params.configurationId
+        id: configurationId
       }
     });
 

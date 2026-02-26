@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,7 @@ import {
     Phone, Mail, MapPin, Check, Upload, GraduationCap, Briefcase 
 } from 'lucide-react';
 import { format } from "date-fns";
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,9 +69,27 @@ const studentFormSchema = z.object({
 
 type FormValues = z.infer<typeof studentFormSchema>;
 
+interface FeeItemDraft {
+    feeHeadId: string;
+    feeHeadName: string;
+    amount: string;
+}
+
+interface ParentContactDraft {
+    relationship: 'FATHER' | 'MOTHER' | 'GUARDIAN';
+    name: string;
+    cnic: string;
+    phone: string;
+    occupation: string;
+    email: string;
+    required?: boolean;
+}
+
 export default function StudentForm() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const photoInputRef = useRef<HTMLInputElement | null>(null);
+    const [selectedPhotoName, setSelectedPhotoName] = useState('');
 
     // --- Data States ---
     const [schools, setSchools] = useState<any[]>([]);
@@ -88,6 +107,20 @@ export default function StudentForm() {
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [selectedParent, setSelectedParent] = useState<any>(null);
+    const [classFeeItems, setClassFeeItems] = useState<FeeItemDraft[]>([]);
+    const [selectedFeeItems, setSelectedFeeItems] = useState<FeeItemDraft[]>([]);
+    const [isLoadingFeeStructure, setIsLoadingFeeStructure] = useState(false);
+    const [parentContacts, setParentContacts] = useState<ParentContactDraft[]>([
+        {
+            relationship: 'FATHER',
+            name: '',
+            cnic: '',
+            phone: '',
+            occupation: '',
+            email: '',
+            required: true,
+        },
+    ]);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
@@ -157,6 +190,48 @@ export default function StudentForm() {
         fetch(`/api/classes/${selectedClass}/sections`).then(res => res.json()).then(setAvailableSections);
     }, [selectedClass, form]);
 
+    useEffect(() => {
+        if (!selectedClass) {
+            setClassFeeItems([]);
+            setSelectedFeeItems([]);
+            return;
+        }
+
+        const loadFeeStructure = async () => {
+            setIsLoadingFeeStructure(true);
+            try {
+                const res = await fetch(`/api/finance/fee-structures?classId=${selectedClass}`);
+                if (!res.ok) {
+                    setClassFeeItems([]);
+                    setSelectedFeeItems([]);
+                    return;
+                }
+                const structures = await res.json();
+                const normalized = structures.map((item: any) => ({
+                    feeHeadId: item.feeHeadId,
+                    feeHeadName: item.feeHead?.name ?? 'Fee Head',
+                    amount: String(Number(item.amount ?? 0)),
+                }));
+                setClassFeeItems(normalized);
+                setSelectedFeeItems(normalized);
+            } catch {
+                toast.error('Failed to load class fee structure');
+                setClassFeeItems([]);
+                setSelectedFeeItems([]);
+            } finally {
+                setIsLoadingFeeStructure(false);
+            }
+        };
+
+        loadFeeStructure();
+    }, [selectedClass]);
+
+    const updateFeeAmount = (feeHeadId: string, amount: string) => {
+        setSelectedFeeItems((prev) =>
+            prev.map((item) => (item.feeHeadId === feeHeadId ? { ...item, amount } : item))
+        );
+    };
+
     // ... (Keep Parent Search Logic) ...
     const handleSearchParent = async () => {
         if (!searchQuery || searchQuery.length < 3) return;
@@ -175,8 +250,50 @@ export default function StudentForm() {
         setSearchResults([]); 
     };
 
+    const addOptionalParent = (relationship: 'MOTHER' | 'GUARDIAN') => {
+        const exists = parentContacts.some((parent) => parent.relationship === relationship);
+        if (exists) return;
+        setParentContacts((prev) => [
+            ...prev,
+            {
+                relationship,
+                name: '',
+                cnic: '',
+                phone: '',
+                occupation: '',
+                email: '',
+            },
+        ]);
+    };
+
+    const removeOptionalParent = (relationship: 'MOTHER' | 'GUARDIAN') => {
+        setParentContacts((prev) => prev.filter((parent) => parent.relationship !== relationship));
+    };
+
+    const updateParentContact = (
+        relationship: 'FATHER' | 'MOTHER' | 'GUARDIAN',
+        field: keyof Omit<ParentContactDraft, 'relationship' | 'required'>,
+        value: string
+    ) => {
+        setParentContacts((prev) =>
+            prev.map((parent) =>
+                parent.relationship === relationship ? { ...parent, [field]: value } : parent
+            )
+        );
+    };
+
+    const handlePhotoClick = () => {
+        photoInputRef.current?.click();
+    };
+
+    const handlePhotoChange = (event: any) => {
+        const file = event.target.files?.[0];
+        setSelectedPhotoName(file?.name || '');
+    };
+
     const onSubmit = async (data: FormValues) => {
         setIsSubmitting(true);
+        form.clearErrors('email');
         try {
             // ... (Keep existing payload construction & API calls) ...
             const payload = {
@@ -186,7 +303,13 @@ export default function StudentForm() {
                     admissionNumber: data.admissionNumber, rollNumber: data.rollNumber || undefined,
                     admissionDate: data.admissionDate, classId: data.classId,
                     sectionId: data.sectionId || undefined, subjectGroupId: data.subjectGroupId || undefined,
-                    academicYear: { startYear: data.startYear, stopYear: data.stopYear }
+                    academicYear: { startYear: data.startYear, stopYear: data.stopYear },
+                    feeStructureItems: selectedFeeItems
+                        .filter((item) => item.feeHeadId && item.amount !== '')
+                        .map((item) => ({
+                            feeHeadId: item.feeHeadId,
+                            amount: Number(item.amount),
+                        })),
                 }
             };
 
@@ -196,33 +319,95 @@ export default function StudentForm() {
                 body: JSON.stringify(payload),
             });
 
-            if (!res.ok) throw new Error('Creation failed');
-            const studentUser = await res.json();
+            const userResult = await res.json().catch(() => ({} as any));
+            if (!res.ok) {
+                if (res.status === 409 && (userResult?.field === 'email' || String(userResult?.error || '').toLowerCase().includes('email'))) {
+                    form.setError('email', {
+                        type: 'manual',
+                        message: 'This email is already registered. Please use another email.',
+                    });
+                    throw new Error('Student email already exists');
+                }
+                if (res.status === 400 && Array.isArray(userResult?.errors)) {
+                    userResult.errors.forEach((issue: any) => {
+                        const field = issue?.path?.[0];
+                        if (typeof field === 'string' && field in data) {
+                            form.setError(field as keyof FormValues, {
+                                type: 'manual',
+                                message: issue.message || 'Invalid value',
+                            });
+                        }
+                    });
+                    throw new Error(userResult?.error || 'Please fix validation errors');
+                }
+                throw new Error(userResult?.error || 'Creation failed');
+            }
+            const studentUser = userResult;
             const studentRecordId = studentUser.studentRecord?.id;
+            let hasParentIssue = false;
 
             if (data.parentMode === 'LINK' && data.selectedParentId) {
-                await fetch(`/api/parents/${data.selectedParentId}/students`, {
+                const linkRes = await fetch(`/api/parents/${data.selectedParentId}/students`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ studentId: studentRecordId, relationship: data.relationship }),
                 });
+                if (!linkRes.ok) {
+                    hasParentIssue = true;
+                }
             } else {
-                await fetch('/api/parents', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: data.parentName, email: data.parentEmail, password: 'password123',
-                        phone: data.parentPhone, address: data.address, schoolId: data.schoolId,
-                        occupation: data.parentOccupation, cnic: data.parentCnic,
-                        studentId: studentRecordId, relationship: data.relationship
-                    }),
+                const toCreate = parentContacts.filter((parent) => {
+                    const hasValues = Boolean(
+                        parent.name.trim() ||
+                        parent.phone.trim() ||
+                        parent.cnic.trim() ||
+                        parent.occupation.trim() ||
+                        parent.email.trim()
+                    );
+                    return parent.required || hasValues;
                 });
+
+                const father = toCreate.find((parent) => parent.relationship === 'FATHER');
+                if (!father?.name.trim() || !father?.phone.trim() || !father?.cnic.trim()) {
+                    throw new Error('Father name, phone and CNIC are required');
+                }
+
+                for (let i = 0; i < toCreate.length; i += 1) {
+                    const parent = toCreate[i];
+                    const generatedEmail = `${data.admissionNumber}-${parent.relationship.toLowerCase()}-${Date.now()}-${i}@school.local`;
+                    const response = await fetch('/api/parents', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: parent.name,
+                            email: parent.email.trim() || generatedEmail,
+                            password: 'password123',
+                            phone: parent.phone,
+                            address: data.address,
+                            schoolId: data.schoolId,
+                            occupation: parent.occupation,
+                            cnic: parent.cnic,
+                            studentId: studentRecordId,
+                            relationship: parent.relationship,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        hasParentIssue = true;
+                    }
+                }
             }
             router.push('/students');
             router.refresh();
+            if (hasParentIssue) {
+                toast.warning('Student created, but one or more parent records could not be linked.');
+            } else {
+                toast.success('Student admission created successfully');
+            }
         } catch (error) {
             console.error(error);
             form.setError('root', { message: 'Failed to create student' });
+            toast.error(error instanceof Error ? error.message : 'Failed to create student admission');
         } finally { setIsSubmitting(false); }
     };
 
@@ -349,6 +534,47 @@ export default function StudentForm() {
                         </div>
                     </div>
 
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Fee Structure Assignment</h3>
+                            <p className="text-sm text-slate-500 mt-1">Class default fee structure is loaded here and you can edit amounts for this student.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {!selectedClass ? (
+                                <p className="text-sm text-slate-500">Select a class to load fee structure.</p>
+                            ) : isLoadingFeeStructure ? (
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading fee structure...
+                                </div>
+                            ) : classFeeItems.length === 0 ? (
+                                <p className="text-sm text-amber-600">No fee structure configured for this class yet.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-12 gap-2 text-xs font-bold uppercase text-slate-500 px-3">
+                                        <span className="col-span-8">Fee Head</span>
+                                        <span className="col-span-4 text-right">Amount</span>
+                                    </div>
+                                    {selectedFeeItems.map((item) => (
+                                        <div key={item.feeHeadId} className="grid grid-cols-12 items-center gap-2 border rounded-lg px-3 py-2 bg-slate-50/50">
+                                            <span className="col-span-8 text-sm font-medium text-slate-800">{item.feeHeadName}</span>
+                                            <div className="col-span-4 flex items-center gap-2">
+                                                <span className="text-sm text-slate-500">Rs.</span>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    value={item.amount}
+                                                    onChange={(event) => updateFeeAmount(item.feeHeadId, event.target.value)}
+                                                    className="bg-white text-right"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* 2. Personal Details Card */}
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 flex items-center gap-3">
@@ -360,9 +586,29 @@ export default function StudentForm() {
                         <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-6">
                             {/* Photo Placeholder */}
                             <div className="md:col-span-1 flex flex-col items-center justify-center gap-3">
-                                <div className="size-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors group">
+                                <input
+                                    ref={photoInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handlePhotoChange}
+                                />
+                                <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={handlePhotoClick}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            handlePhotoClick();
+                                        }
+                                    }}
+                                    className="size-32 rounded-lg border-2 border-dashed border-slate-300 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors group"
+                                >
                                     <Upload className="text-slate-400 group-hover:text-primary transition-colors h-8 w-8" />
-                                    <span className="text-xs text-slate-400 font-medium mt-1">Upload Photo</span>
+                                    <span className="text-xs text-slate-400 font-medium mt-1 text-center px-1">
+                                        {selectedPhotoName || 'Upload Photo'}
+                                    </span>
                                 </div>
                             </div>
 
@@ -450,7 +696,13 @@ export default function StudentForm() {
                                 <Switch 
                                     id="parent-link"
                                     checked={form.watch('parentMode') === 'LINK'}
-                                    onCheckedChange={(c) => form.setValue('parentMode', c ? 'LINK' : 'CREATE')} 
+                                    onCheckedChange={(checked) => {
+                                        form.setValue('parentMode', checked ? 'LINK' : 'CREATE');
+                                        if (!checked) {
+                                            setSelectedParent(null);
+                                            form.setValue('selectedParentId', '');
+                                        }
+                                    }} 
                                 />
                                 <Label htmlFor="parent-link" className="text-sm text-slate-600">Link Existing Parent?</Label>
                             </div>
@@ -502,40 +754,105 @@ export default function StudentForm() {
                             )}
 
                             <div className="border-t border-slate-200 pt-6 mt-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <FormField control={form.control} name="relationship" render={({ field }) => (
-                                    <FormItem className="md:col-span-2">
-                                        <FormLabel className="text-slate-700">Relationship *</FormLabel>
-                                        <FormControl>
-                                            <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4 mt-2">
-                                                {['FATHER', 'MOTHER', 'GUARDIAN'].map(r => (
-                                                    <div key={r} className="flex items-center space-x-2">
-                                                        <RadioGroupItem value={r} id={r} className="text-primary" />
-                                                        <Label htmlFor={r} className="capitalize">{r.toLowerCase()}</Label>
-                                                    </div>
-                                                ))}
-                                            </RadioGroup>
-                                        </FormControl>
-                                    </FormItem>
-                                )} />
+                                {form.watch('parentMode') === 'CREATE' && (
+                                    <div className="md:col-span-2 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm text-slate-600">Father is required. Mother and Guardian are optional.</p>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => addOptionalParent('MOTHER')}
+                                                    disabled={parentContacts.some((parent) => parent.relationship === 'MOTHER')}
+                                                >
+                                                    Add Mother
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => addOptionalParent('GUARDIAN')}
+                                                    disabled={parentContacts.some((parent) => parent.relationship === 'GUARDIAN')}
+                                                >
+                                                    Add Guardian
+                                                </Button>
+                                            </div>
+                                        </div>
 
-                                {form.watch('parentMode') === 'CREATE' && !selectedParent && (
-                                    <>
-                                        <FormField control={form.control} name="parentName" render={({ field }) => (
-                                            <FormItem><FormLabel className="text-slate-700">Parent Name *</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
-                                        )} />
-                                        <FormField control={form.control} name="parentCnic" render={({ field }) => (
-                                            <FormItem><FormLabel className="text-slate-700">CNIC Number *</FormLabel><FormControl><Input {...field} className="bg-white" placeholder="XXXXX-XXXXXXX-X" /></FormControl><FormMessage /></FormItem>
-                                        )} />
-                                        <FormField control={form.control} name="parentPhone" render={({ field }) => (
-                                            <FormItem><FormLabel className="text-slate-700">Contact Phone *</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
-                                        )} />
-                                        <FormField control={form.control} name="parentOccupation" render={({ field }) => (
-                                            <FormItem><FormLabel className="text-slate-700">Occupation</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
-                                        )} />
-                                        <FormField control={form.control} name="parentEmail" render={({ field }) => (
-                                            <FormItem><FormLabel className="text-slate-700">Email Address (Optional)</FormLabel><FormControl><Input {...field} className="bg-white" /></FormControl><FormMessage /></FormItem>
-                                        )} />
-                                    </>
+                                        {parentContacts.map((parent) => (
+                                            <div key={parent.relationship} className="rounded-lg border border-slate-200 p-4 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-semibold text-slate-800 capitalize">
+                                                        {parent.relationship.toLowerCase()} {parent.required ? '(Required)' : '(Optional)'}
+                                                    </h4>
+                                                    {!parent.required && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => removeOptionalParent(parent.relationship as 'MOTHER' | 'GUARDIAN')}
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <FormItem>
+                                                        <FormLabel className="text-slate-700">Name {parent.required ? '*' : ''}</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                className="bg-white"
+                                                                value={parent.name}
+                                                                onChange={(event) => updateParentContact(parent.relationship, 'name', event.target.value)}
+                                                            />
+                                                        </FormControl>
+                                                    </FormItem>
+                                                    <FormItem>
+                                                        <FormLabel className="text-slate-700">CNIC {parent.required ? '*' : ''}</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                className="bg-white"
+                                                                placeholder="XXXXX-XXXXXXX-X"
+                                                                value={parent.cnic}
+                                                                onChange={(event) => updateParentContact(parent.relationship, 'cnic', event.target.value)}
+                                                            />
+                                                        </FormControl>
+                                                    </FormItem>
+                                                    <FormItem>
+                                                        <FormLabel className="text-slate-700">Contact Phone {parent.required ? '*' : ''}</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                className="bg-white"
+                                                                value={parent.phone}
+                                                                onChange={(event) => updateParentContact(parent.relationship, 'phone', event.target.value)}
+                                                            />
+                                                        </FormControl>
+                                                    </FormItem>
+                                                    <FormItem>
+                                                        <FormLabel className="text-slate-700">Occupation</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                className="bg-white"
+                                                                value={parent.occupation}
+                                                                onChange={(event) => updateParentContact(parent.relationship, 'occupation', event.target.value)}
+                                                            />
+                                                        </FormControl>
+                                                    </FormItem>
+                                                    <FormItem className="md:col-span-2">
+                                                        <FormLabel className="text-slate-700">Email Address (Optional)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                className="bg-white"
+                                                                value={parent.email}
+                                                                onChange={(event) => updateParentContact(parent.relationship, 'email', event.target.value)}
+                                                            />
+                                                        </FormControl>
+                                                    </FormItem>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                         </div>

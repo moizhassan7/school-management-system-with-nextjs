@@ -16,6 +16,7 @@ import {
     XCircle
 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from 'sonner';
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,20 +30,64 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function InvoicesPage() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState<string>('ALL');
+    const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+    const loadInvoices = async () => {
+        const res = await fetch('/api/finance/invoices');
+        const data = await res.json();
+        setInvoices(data);
+        setLoading(false);
+    };
 
     useEffect(() => {
-        fetch('/api/finance/invoices')
-            .then(res => res.json())
-            .then(data => {
-                setInvoices(data);
-                setLoading(false);
-            });
+        loadInvoices();
     }, []);
+
+    const handleSendInvoice = async (invoiceId: string) => {
+        setActionLoadingId(invoiceId);
+        try {
+            const res = await fetch(`/api/finance/invoices/${invoiceId}/send`, {
+                method: 'POST',
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to send invoice');
+            toast.success(data.message || 'Invoice sent');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to send invoice');
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
+
+    const handleStatusUpdate = async (invoiceId: string, action: 'MARK_PAID' | 'MARK_UNPAID' | 'CANCEL') => {
+        setActionLoadingId(invoiceId);
+        try {
+            const res = await fetch(`/api/finance/invoices/${invoiceId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to update invoice');
+            toast.success('Invoice updated');
+            await loadInvoices();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update invoice');
+        } finally {
+            setActionLoadingId(null);
+        }
+    };
 
     // Derived State for Stats
     const totalActive = invoices.filter(i => i.status !== 'CANCELLED').length;
@@ -66,7 +111,7 @@ export default function InvoicesPage() {
                     <Button variant="outline" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 shadow-sm gap-2">
                         <Printer className="h-4 w-4" /> Print Report
                     </Button>
-                    <Link href="/finance/invoices/generate">
+                    <Link href="/finance/invoices/custom">
                         <Button className="bg-primary hover:bg-primary/90 text-white shadow-md gap-2">
                             <Plus className="h-4 w-4" /> Generate Invoice
                         </Button>
@@ -215,10 +260,39 @@ export default function InvoicesPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary"><Eye className="h-4 w-4" /></Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary"><Send className="h-4 w-4" /></Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary"><MoreVertical className="h-4 w-4" /></Button>
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <Link href={`/finance/invoices/${inv.id}`}>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary">
+                                                            <Eye className="h-4 w-4" />
+                                                        </Button>
+                                                    </Link>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-slate-400 hover:text-primary"
+                                                        disabled={actionLoadingId === inv.id}
+                                                        onClick={() => handleSendInvoice(inv.id)}
+                                                    >
+                                                        <Send className="h-4 w-4" />
+                                                    </Button>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary">
+                                                                <MoreVertical className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'MARK_PAID')}>
+                                                                Mark paid
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'MARK_UNPAID')}>
+                                                                Mark unpaid
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'CANCEL')}>
+                                                                Cancel invoice
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 </div>
                                             </TableCell>
                                         </TableRow>

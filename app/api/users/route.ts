@@ -16,6 +16,10 @@ const studentSchema = z.object({
     startYear: z.string(),
     stopYear: z.string(),
   }).optional(),
+  feeStructureItems: z.array(z.object({
+    feeHeadId: z.string(),
+    amount: z.number().nonnegative(),
+  })).optional(),
 });
 
 const userSchema = z.object({
@@ -67,6 +71,10 @@ export async function POST(request: Request) {
     }
     const body = await request.json()
     const data = userSchema.parse(body)
+    const effectiveSchoolId = role === 'SUPER_ADMIN' ? data.schoolId : schoolId;
+    if (!effectiveSchoolId) {
+      return NextResponse.json({ error: 'School is required' }, { status: 400 });
+    }
 
     const passwordHash = crypto.createHash('sha256').update(data.password).digest('hex')
 
@@ -80,7 +88,7 @@ export async function POST(request: Request) {
         emailVerified: data.emailVerified ?? false,
         emailVerifiedAt: (data.emailVerified ?? false) ? new Date() : null,
         profilePath: data.profilePath || null,
-        schoolId: role === 'SUPER_ADMIN' ? data.schoolId : schoolId,
+        schoolId: effectiveSchoolId,
         gender: data.gender ?? 'UNSPECIFIED',
         phone: data.phone || null,
         address: data.address || null,
@@ -98,7 +106,7 @@ export async function POST(request: Request) {
       if (!academicYearId && s.academicYear) {
         const existing = await prisma.academicYear.findFirst({
           where: {
-            schoolId: data.schoolId,
+            schoolId: effectiveSchoolId,
             startYear: s.academicYear.startYear,
             stopYear: s.academicYear.stopYear,
           },
@@ -140,6 +148,28 @@ export async function POST(request: Request) {
           },
         })
       }
+
+      if (s.feeStructureItems?.length) {
+        const sanitizedItems = s.feeStructureItems
+          .filter((item) => Number(item.amount) >= 0)
+          .map((item) => ({
+            feeHeadId: item.feeHeadId,
+            amount: Number(item.amount),
+          }));
+
+        if (sanitizedItems.length) {
+          await prisma.studentFeeStructure.create({
+            data: {
+              studentRecordId: studentRecord.id,
+              schoolId: effectiveSchoolId,
+              classId: s.classId || null,
+              items: {
+                create: sanitizedItems,
+              },
+            },
+          });
+        }
+      }
     }
 
     // Return the user AND the studentRecord so the frontend can access the ID
@@ -151,6 +181,13 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ errors: error.issues }, { status: 400 })
+    }
+    if ((error as any)?.code === 'P2002') {
+      const target = (error as any)?.meta?.target;
+      if (Array.isArray(target) && target.includes('email')) {
+        return NextResponse.json({ error: 'User email already exists', field: 'email' }, { status: 409 });
+      }
+      return NextResponse.json({ error: 'Duplicate record found' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
   }

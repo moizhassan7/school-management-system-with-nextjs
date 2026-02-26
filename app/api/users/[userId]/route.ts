@@ -46,6 +46,18 @@ export async function GET(
             },
             myClass: true,
             section: true,
+            feeStructure: {
+              include: {
+                items: {
+                  include: {
+                    feeHead: true,
+                  },
+                  orderBy: {
+                    createdAt: 'asc',
+                  },
+                },
+              },
+            },
             // FIX: Ensure parents are fetched with user details
             parents: {
               include: {

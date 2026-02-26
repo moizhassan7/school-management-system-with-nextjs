@@ -137,7 +137,7 @@ export default function AccountantDashboard({ data }: AccountantDashboardProps) 
               </div>
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">View Invoices</span>
             </Link>
-            <Link href="/finance/invoices/generate" className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+            <Link href="/finance/invoices/custom" className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
               <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
                 <DollarSign className="h-5 w-5" />
               </div>

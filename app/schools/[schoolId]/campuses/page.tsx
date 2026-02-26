@@ -13,6 +13,7 @@ import {
     Phone, 
     Mail 
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -93,7 +94,7 @@ export default function CampusesPage({ params }: { params: Promise<{ schoolId: s
             // Refresh the list
             fetchData();
         } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to delete campus');
+            toast.error(err instanceof Error ? err.message : 'Failed to delete campus');
         }
     };
 

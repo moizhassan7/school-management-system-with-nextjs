@@ -146,6 +146,7 @@ model Class {
   
   sections       Section[]
   studentRecords StudentRecord[]
+  studentFeeStructures StudentFeeStructure[]
   yearRecords    AcademicYearStudentRecord[]
   feeStructures  FeeStructure[]
   
@@ -183,6 +184,7 @@ model StudentRecord {
   
   academicYearRecords AcademicYearStudentRecord[]
   parents          Kinship[]
+  feeStructure     StudentFeeStructure?
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -336,8 +338,34 @@ model FeeHead {
   discounts   Discount[]
   invoiceItems InvoiceItem[]
   challanItems ChallanItem[]
+  studentFeeItems StudentFeeStructureItem[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model StudentFeeStructure {
+  id              String   @id @default(cuid())
+  studentRecordId String   @unique
+  studentRecord   StudentRecord @relation(fields: [studentRecordId], references: [id], onDelete: Cascade)
+  classId         String?
+  myClass         Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  schoolId        String
+  items           StudentFeeStructureItem[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model StudentFeeStructureItem {
+  id                     String   @id @default(cuid())
+  studentFeeStructureId  String
+  studentFeeStructure    StudentFeeStructure @relation(fields: [studentFeeStructureId], references: [id], onDelete: Cascade)
+  feeHeadId              String
+  feeHead                FeeHead  @relation(fields: [feeHeadId], references: [id], onDelete: Restrict)
+  amount                 Decimal  @db.Decimal(10, 2)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([studentFeeStructureId, feeHeadId])
 }
 
 model Challan {

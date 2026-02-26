@@ -5,7 +5,7 @@ import { auth } from '@/auth';
 // GET: Fetch results for a specific class test
 export async function GET(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
     const session = await auth();
@@ -13,7 +13,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { testId } = params;
+    const { testId } = await params;
 
     const results = await prisma.classTestResult.findMany({
       where: { classTestId: testId },
@@ -44,7 +44,7 @@ export async function GET(
 // POST: Create or update results for a class test
 export async function POST(
   request: NextRequest,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
     const session = await auth();
@@ -52,7 +52,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { testId } = params;
+    const { testId } = await params;
     const body = await request.json();
     const { results } = body;
 

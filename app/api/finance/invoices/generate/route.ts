@@ -31,13 +31,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
-        // 2. Fetch Fee Structure for this Class
-        const feeStructures = await prisma.feeStructure.findMany({
+        // 2. Fetch class default fee structure (fallback when student snapshot does not exist)
+        const classFeeStructures = await prisma.feeStructure.findMany({
             where: { classId },
             include: { feeHead: true }
         });
 
-        if (feeStructures.length === 0) {
+        if (classFeeStructures.length === 0) {
             return NextResponse.json({ error: "No fee structure defined for this class" }, { status: 400 });
         }
 
@@ -48,6 +48,11 @@ export async function POST(request: Request) {
                 // Add logic here to exclude graduated/left students if you have a status field
             },
             include: {
+                feeStructure: {
+                    include: {
+                        items: true,
+                    },
+                },
                 user: {
                     include: {
                         // We need the reverse relation `studentDiscounts` in User model. 
@@ -86,13 +91,23 @@ export async function POST(request: Request) {
             const student = record.user;
             
             // Calculate Items & Discounts for this specific student
-            const invoiceItemsData = feeStructures.map(fs => {
-                const originalAmount = Number(fs.amount);
+            const sourceFeeItems = record.feeStructure?.items?.length
+                ? record.feeStructure.items.map((item) => ({
+                    feeHeadId: item.feeHeadId,
+                    amount: Number(item.amount),
+                }))
+                : classFeeStructures.map((item) => ({
+                    feeHeadId: item.feeHeadId,
+                    amount: Number(item.amount),
+                }));
+
+            const invoiceItemsData = sourceFeeItems.map((sourceItem) => {
+                const originalAmount = Number(sourceItem.amount);
                 
                 // Find matching discount for this Fee Head
                 // @ts-ignore
                 const activeDiscount = student.studentDiscounts.find(
-                    (sd: any) => sd.discount.feeHeadId === fs.feeHeadId
+                    (sd: any) => sd.discount.feeHeadId === sourceItem.feeHeadId
                 );
 
                 const discountVal = activeDiscount 
@@ -104,8 +119,8 @@ export async function POST(request: Request) {
                 const finalAmount = originalAmount - finalDiscount;
 
                 return {
-                    feeHeadId: fs.feeHeadId,
-                    originalAmount: fs.amount,
+                    feeHeadId: sourceItem.feeHeadId,
+                    originalAmount,
                     discountAmount: finalDiscount,
                     amount: finalAmount
                 };

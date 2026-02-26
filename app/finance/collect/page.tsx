@@ -33,6 +33,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import StudentDiscountManager from '@/components/finance/student-discount-manager';
+import { toast } from 'sonner';
 
 export default function FeeCollectionPage() {
   const [search, setSearch] = useState('');
@@ -88,14 +89,14 @@ export default function FeeCollectionPage() {
         if (res.ok) {
             setIsModalOpen(false);
             handleSearch(); // Refresh data to show updated history/balance
-            alert("Payment Recorded Successfully!");
+            toast.success("Payment recorded successfully");
         } else {
             const err = await res.json();
-            alert(`Error: ${err.error}`);
+            toast.error(err.error || 'Failed to record payment');
         }
     } catch (e) {
         console.error(e);
-        alert("Failed to process payment");
+        toast.error("Failed to process payment");
     } finally {
         setPaymentLoading(false);
     }

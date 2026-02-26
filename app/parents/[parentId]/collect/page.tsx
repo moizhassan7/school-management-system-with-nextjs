@@ -12,6 +12,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { toast } from 'sonner';
 
 export default function ParentCollectPage({ params }: { params: Promise<{ parentId: string }> }) {
     const { parentId } = use(params);
@@ -62,7 +63,7 @@ export default function ParentCollectPage({ params }: { params: Promise<{ parent
             const data = await res.json();
             setResult(data);
         } catch (error) {
-            alert("Something went wrong processing the payment.");
+            toast.error("Something went wrong processing the payment.");
         } finally {
             setProcessing(false);
         }

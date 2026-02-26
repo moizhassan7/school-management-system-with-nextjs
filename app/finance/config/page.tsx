@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSidebar } from '@/contexts/SidebarContext';
-import { Plus, Save, ArrowRight } from 'lucide-react';
+import { Plus, Save, ArrowRight, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function FinanceConfigPage() {
   // FIX 1: We only need 'schools' now, as it contains the full tree
@@ -31,6 +32,8 @@ export default function FinanceConfigPage() {
   // Structure State
   const [selectedClassId, setSelectedClassId] = useState('');
   const [feeStructures, setFeeStructures] = useState<Record<string, number>>({});
+  const [selectedStructureHeadIds, setSelectedStructureHeadIds] = useState<string[]>([]);
+  const [selectedStructureHeadToAdd, setSelectedStructureHeadToAdd] = useState('');
 
   // --- FIX 2: Derive 'allClasses' by flattening the Schools hierarchy ---
   // School -> Campus -> ClassGroup -> Class
@@ -55,13 +58,18 @@ export default function FinanceConfigPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedClassId) return;
+    if (!selectedClassId) {
+      setFeeStructures({});
+      setSelectedStructureHeadIds([]);
+      return;
+    }
     fetch(`/api/finance/fee-structures?classId=${selectedClassId}`)
       .then(res => res.json())
       .then(data => {
         const mapping: Record<string, number> = {};
         data.forEach((fs: any) => mapping[fs.feeHeadId] = fs.amount);
         setFeeStructures(mapping);
+        setSelectedStructureHeadIds(data.map((fs: any) => fs.feeHeadId));
       });
   }, [selectedClassId]);
 
@@ -103,7 +111,17 @@ export default function FinanceConfigPage() {
   };
 
   const handleSaveStructure = async () => {
-    for (const [headId, amount] of Object.entries(feeStructures)) {
+    if (!selectedClassId) return;
+    const entriesToSave = Object.entries(feeStructures).filter(([headId]) =>
+      selectedStructureHeadIds.includes(headId)
+    );
+
+    if (entriesToSave.length === 0) {
+      toast.error('Please add at least one fee head');
+      return;
+    }
+
+    for (const [headId, amount] of entriesToSave) {
       await fetch('/api/finance/fee-structures', {
         method: 'POST',
         body: JSON.stringify({
@@ -114,7 +132,28 @@ export default function FinanceConfigPage() {
         })
       });
     }
-    alert('Fee Structure Saved!');
+    toast.success('Fee structure saved');
+  };
+
+  const handleAddStructureHead = () => {
+    if (!selectedStructureHeadToAdd) return;
+    setSelectedStructureHeadIds((prev) =>
+      prev.includes(selectedStructureHeadToAdd) ? prev : [...prev, selectedStructureHeadToAdd]
+    );
+    setFeeStructures((prev) => ({
+      ...prev,
+      [selectedStructureHeadToAdd]: prev[selectedStructureHeadToAdd] ?? 0,
+    }));
+    setSelectedStructureHeadToAdd('');
+  };
+
+  const handleRemoveStructureHead = (headId: string) => {
+    setSelectedStructureHeadIds((prev) => prev.filter((id) => id !== headId));
+    setFeeStructures((prev) => {
+      const next = { ...prev };
+      delete next[headId];
+      return next;
+    });
   };
 
   return (
@@ -257,11 +296,32 @@ export default function FinanceConfigPage() {
 
               {selectedClassId ? (
                 <div className="space-y-1">
+                  <div className="flex gap-2 max-w-xl pb-4">
+                    <Select value={selectedStructureHeadToAdd} onValueChange={setSelectedStructureHeadToAdd}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Add fee head to this class..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {feeHeads
+                          .filter((head) => !selectedStructureHeadIds.includes(head.id))
+                          .map((head) => (
+                            <SelectItem key={head.id} value={head.id}>{head.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" onClick={handleAddStructureHead} disabled={!selectedStructureHeadToAdd}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add
+                    </Button>
+                  </div>
                   <div className="grid gap-3 border p-6 rounded-lg bg-slate-50/50">
-                    {feeHeads.map(head => (
+                    {selectedStructureHeadIds.map((headId) => {
+                      const head = feeHeads.find((item) => item.id === headId);
+                      if (!head) return null;
+                      return (
                       <div key={head.id} className="flex items-center justify-between p-2 bg-white rounded border">
                         <Label className="w-1/3 cursor-pointer">{head.name}</Label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 justify-end">
                           <span className="text-sm text-gray-500">$</span>
                           <Input 
                             type="number" 
@@ -270,9 +330,12 @@ export default function FinanceConfigPage() {
                             value={feeStructures[head.id] || ''}
                             onChange={(e) => setFeeStructures(prev => ({ ...prev, [head.id]: Number(e.target.value) }))}
                           />
+                          <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveStructureHead(head.id)}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                   <div className="pt-4 flex justify-end">
                     <Button onClick={handleSaveStructure} className="w-40"><Save className="mr-2 h-4 w-4" /> Save</Button>

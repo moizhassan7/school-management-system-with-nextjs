@@ -10,13 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 export default function StudentProfilePage({ params }: { params: Promise<{ studentId: string }> }) {
     const { studentId } = use(params);
     const [student, setStudent] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [reassignMode, setReassignMode] = useState<'KEEP_EXISTING' | 'SWITCH_TO_CLASS_DEFAULT'>('KEEP_EXISTING');
+    const [isUpdatingFeeStructure, setIsUpdatingFeeStructure] = useState(false);
 
     useEffect(() => {
         setLoading(true);
@@ -53,6 +57,35 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
 
     const record = student.studentRecord;
     const parents = record?.parents || [];
+    const currentFeeItems = record?.feeStructure?.items || [];
+
+    const handleFeeStructureReassign = async () => {
+        setIsUpdatingFeeStructure(true);
+        try {
+            const res = await fetch(`/api/students/${student.id}/fee-structure`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: reassignMode,
+                    classId: record?.classId,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to update fee structure');
+            }
+
+            toast.success(data.message || 'Fee structure updated');
+            const refreshed = await fetch(`/api/users/${student.id}`);
+            if (refreshed.ok) {
+                setStudent(await refreshed.json());
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update fee structure');
+        } finally {
+            setIsUpdatingFeeStructure(false);
+        }
+    };
 
     return (
         <div className="container mx-auto py-8 px-4 space-y-6">
@@ -118,6 +151,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                             <TabsTrigger value="details" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Personal Details</TabsTrigger>
                             <TabsTrigger value="parents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Parents & Guardians</TabsTrigger>
                             <TabsTrigger value="academics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Academic History</TabsTrigger>
+                            <TabsTrigger value="fees" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Fee Structure</TabsTrigger>
                         </TabsList>
 
                         {/* 1. Personal Details Tab */}
@@ -208,6 +242,53 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                                     ) : (
                                         <div className="text-center py-8 text-slate-500 italic">No previous academic records found.</div>
                                     )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        <TabsContent value="fees" className="pt-6 space-y-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">Assigned Student Fee Structure</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {currentFeeItems.length === 0 ? (
+                                        <p className="text-sm text-slate-500">No student-specific fee snapshot found yet.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {currentFeeItems.map((item: any) => (
+                                                <div key={item.id} className="flex items-center justify-between rounded border p-2 bg-slate-50">
+                                                    <span className="text-sm font-medium text-slate-800">{item.feeHead?.name || 'Fee Head'}</span>
+                                                    <span className="text-sm font-semibold text-slate-900">Rs. {Number(item.amount).toFixed(2)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-base">Reassign Fee Structure</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <p className="text-sm text-slate-600">Choose what to do when reassigning this student's fee structure.</p>
+                                    <Select
+                                        value={reassignMode}
+                                        onValueChange={(value) => setReassignMode(value as 'KEEP_EXISTING' | 'SWITCH_TO_CLASS_DEFAULT')}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select an option" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="KEEP_EXISTING">Keep previous fee structure</SelectItem>
+                                            <SelectItem value="SWITCH_TO_CLASS_DEFAULT">Replace with current class fee structure</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button onClick={handleFeeStructureReassign} disabled={isUpdatingFeeStructure}>
+                                        {isUpdatingFeeStructure ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        Apply Selection
+                                    </Button>
                                 </CardContent>
                             </Card>
                         </TabsContent>
