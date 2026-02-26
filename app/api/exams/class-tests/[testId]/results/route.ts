@@ -33,7 +33,7 @@ export async function GET(
       }
     });
 
-    const mappedResults = results.map(r => ({
+    const mappedResults = results.map((r: any) => ({
       id: r.id,
       classTestId: testId,
       studentId: r.studentId,
