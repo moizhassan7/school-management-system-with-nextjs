@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         where: { teacherId: staff.id },
         select: { classId: true }
       });
-      const classIds = Array.from(new Set(assignments.map(a => a.classId)));
+      const classIds = Array.from(new Set(assignments.map((a: { classId: string }) => a.classId)));
       classWhere = {
         ...classWhere,
         id: { in: classIds.length ? classIds : ['__none__'] }
