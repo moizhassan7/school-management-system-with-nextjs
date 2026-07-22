@@ -62,29 +62,6 @@ type AuthUser = {
   id?: string | null;
 };
 
-type PrismaLike = {
-  rolePermission: {
-    findMany: (args: unknown) => Promise<
-      { permission: { module: string; action: string } }[]
-    >;
-    upsert: (args: unknown) => Promise<unknown>;
-  };
-  userPermission: {
-    findMany: (args: unknown) => Promise<
-      { granted: boolean; permission: { module: string; action: string } }[]
-    >;
-  };
-  campusAccess: {
-    findMany: (args: unknown) => Promise<{ campusId: string }[]>;
-  };
-  permission: {
-    findMany: (args?: unknown) => Promise<
-      { id: string; module: string; action: string }[]
-    >;
-    upsert: (args: unknown) => Promise<unknown>;
-  };
-};
-
 export function can(
   user: AuthUser | null | undefined,
   module: ModuleKey | string,
@@ -168,7 +145,7 @@ export const ROLE_DEFAULT_MODULES: Record<
 };
 
 export async function resolveUserPermissions(
-  prisma: PrismaLike,
+  prisma: any,
   userId: string,
   role: string
 ): Promise<string[]> {
@@ -181,38 +158,37 @@ export async function resolveUserPermissions(
     include: { permission: true },
   });
 
-  const set = new Set(
-    rolePerms.map((rp) =>
-      permissionKey(rp.permission.module, rp.permission.action)
-    )
-  );
+  const set = new Set<string>();
+  for (const rp of rolePerms as any[]) {
+    set.add(permissionKey(rp.permission.module, rp.permission.action));
+  }
 
   const overrides = await prisma.userPermission.findMany({
     where: { userId },
     include: { permission: true },
   });
 
-  for (const o of overrides) {
+  for (const o of overrides as any[]) {
     const key = permissionKey(o.permission.module, o.permission.action);
     if (o.granted) set.add(key);
     else set.delete(key);
   }
 
-  return Array.from(set);
+  return [...set];
 }
 
 export async function resolveCampusIds(
-  prisma: PrismaLike,
+  prisma: any,
   userId: string
 ): Promise<string[]> {
   const rows = await prisma.campusAccess.findMany({
     where: { userId },
     select: { campusId: true },
   });
-  return rows.map((r) => r.campusId);
+  return (rows as any[]).map((r) => String(r.campusId));
 }
 
-export async function seedPermissionCatalog(prisma: PrismaLike) {
+export async function seedPermissionCatalog(prisma: any) {
   for (const module of MODULES) {
     for (const action of ACTIONS) {
       await prisma.permission.upsert({
@@ -225,7 +201,7 @@ export async function seedPermissionCatalog(prisma: PrismaLike) {
 
   const allPerms = await prisma.permission.findMany();
   const byKey = new Map(
-    allPerms.map((p) => [permissionKey(p.module, p.action), p])
+    allPerms.map((p: any) => [permissionKey(p.module, p.action), p])
   );
 
   for (const [role, modules] of Object.entries(ROLE_DEFAULT_MODULES) as [
@@ -237,7 +213,9 @@ export async function seedPermissionCatalog(prisma: PrismaLike) {
       ActionKey[],
     ][]) {
       for (const action of actions) {
-        const perm = byKey.get(permissionKey(module, action));
+        const perm = byKey.get(permissionKey(module, action)) as
+          | { id: string }
+          | undefined;
         if (!perm) continue;
         await prisma.rolePermission.upsert({
           where: {

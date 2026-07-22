@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,9 +64,12 @@ interface UserFormProps {
 
 export default function UserForm({ userId, initialData }: UserFormProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [schools, setSchools] = useState<SchoolOption[]>([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const sessionSchoolId = session?.user?.schoolId || '';
   const [name, setName] = useState(initialData?.name || '');
   const [email, setEmail] = useState(initialData?.email || '');
   const [username, setUsername] = useState(initialData?.username || '');
@@ -76,30 +80,53 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
   const [active, setActive] = useState(!(initialData?.suspended ?? false));
   const [campusIds, setCampusIds] = useState<string[]>(initialData?.campusIds || []);
   const [roleDefaults, setRoleDefaults] = useState<Set<string>>(new Set());
-  /** effective checked state in UI */
   const [matrix, setMatrix] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    if (!schoolId && sessionSchoolId) setSchoolId(sessionSchoolId);
+  }, [sessionSchoolId, schoolId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSchoolsLoading(true);
     fetch('/api/schools')
-      .then((r) => r.json())
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        setSchools(
-          data.map((s: any) => ({
-            id: s.id,
-            name: s.name,
-            initials: s.initials,
-            campuses: (s.campuses || []).map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              schoolId: s.id,
-            })),
-          }))
-        );
-        if (!schoolId && data[0]?.id) setSchoolId(data[0].id);
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed to load schools');
+        return data;
       })
-      .catch(() => {});
-  }, []);
+      .then((data) => {
+        if (cancelled) return;
+        if (!Array.isArray(data) || data.length === 0) {
+          setSchools([]);
+          toast.error('No schools found. Create a school in Configuration first.');
+          return;
+        }
+        const opts = data.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          initials: s.initials,
+          campuses: (s.campuses || []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            schoolId: s.id,
+          })),
+        }));
+        setSchools(opts);
+        setSchoolId((prev) => prev || sessionSchoolId || opts[0]?.id || '');
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : 'Failed to load schools');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSchoolsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionSchoolId]);
 
   useEffect(() => {
     if (!role || role === 'SUPER_ADMIN') {
@@ -120,7 +147,6 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
           }
         }
 
-        // Apply existing overrides on edit
         for (const o of initialData?.permissionOverrides || []) {
           const key = permissionKey(o.module, o.action);
           next[key] = o.granted;
@@ -136,7 +162,6 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
   );
 
   useEffect(() => {
-    // Drop campus selections that don't belong to the selected school
     setCampusIds((prev) =>
       prev.filter((id) => campusesForSchool.some((c) => c.id === id))
     );
@@ -184,6 +209,10 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const resolvedSchoolId = schoolId || sessionSchoolId;
+      if (!resolvedSchoolId) {
+        throw new Error('Please select a school');
+      }
       if (!userId && password.length < 6) {
         throw new Error('Password must be at least 6 characters');
       }
@@ -193,7 +222,7 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
         email,
         username: username || null,
         phone,
-        schoolId,
+        schoolId: resolvedSchoolId,
         role,
         suspended: !active,
         campusIds,
@@ -207,7 +236,13 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save user');
+      if (!res.ok) {
+        const message =
+          json.error ||
+          (Array.isArray(json.errors) ? json.errors[0]?.message : null) ||
+          'Failed to save user';
+        throw new Error(message);
+      }
 
       toast.success(userId ? 'User updated' : 'User created');
       router.push('/users');
@@ -236,7 +271,11 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
           </div>
           <div>
             <Label>Username</Label>
-            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="optional login name" />
+            <Input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="optional login name"
+            />
           </div>
           <div>
             <Label>Phone</Label>
@@ -253,22 +292,42 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
           </div>
           <div>
             <Label>School</Label>
-            <Select value={schoolId} onValueChange={setSchoolId}>
-              <SelectTrigger><SelectValue placeholder="Select school" /></SelectTrigger>
+            <Select
+              value={schoolId || undefined}
+              onValueChange={setSchoolId}
+              disabled={
+                schoolsLoading ||
+                (session?.user?.role !== 'SUPER_ADMIN' && !!sessionSchoolId)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={schoolsLoading ? 'Loading schools...' : 'Select school'}
+                />
+              </SelectTrigger>
               <SelectContent>
                 {schools.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {!schoolsLoading && schools.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">No schools available.</p>
+            )}
           </div>
           <div>
             <Label>Role</Label>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {ASSIGNABLE_ROLES.map((r) => (
-                  <SelectItem key={r} value={r}>{r.replace('_', ' ')}</SelectItem>
+                  <SelectItem key={r} value={r}>
+                    {r.replace('_', ' ')}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -289,7 +348,10 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
             <p className="text-sm text-slate-500">No campuses for this school.</p>
           ) : (
             campusesForSchool.map((c) => (
-              <label key={c.id} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 cursor-pointer">
+              <label
+                key={c.id}
+                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 cursor-pointer"
+              >
                 <Checkbox
                   checked={campusIds.includes(c.id)}
                   onCheckedChange={() => toggleCampus(c.id)}
@@ -317,7 +379,9 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
               <tr className="border-b text-left">
                 <th className="py-2 pr-4">Module</th>
                 {ACTIONS.map((a) => (
-                  <th key={a} className="py-2 px-2 text-center font-medium">{a}</th>
+                  <th key={a} className="py-2 px-2 text-center font-medium">
+                    {a}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -349,7 +413,7 @@ export default function UserForm({ userId, initialData }: UserFormProps) {
       </Card>
 
       <div className="flex gap-3">
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || schoolsLoading}>
           {isSubmitting ? 'Saving...' : userId ? 'Update User' : 'Create User'}
         </Button>
         <Button type="button" variant="outline" onClick={() => router.push('/users')}>

@@ -19,6 +19,16 @@ const randomDate = (daysAgo: number) => {
   return date;
 };
 
+async function grantCampusAccess(userId: string, campusIds: string[]) {
+  for (const campusId of campusIds) {
+    await prisma.campusAccess.upsert({
+      where: { userId_campusId: { userId, campusId } },
+      update: {},
+      create: { userId, campusId },
+    });
+  }
+}
+
 async function main() {
   console.log('🌱 Starting comprehensive seed...');
 
@@ -162,9 +172,10 @@ async function main() {
   // 2. Create Admin Users
   const superAdmin = await prisma.user.upsert({
     where: { email: 'super@school.com' },
-    update: { role: Role.SUPER_ADMIN },
+    update: { role: Role.SUPER_ADMIN, username: 'superadmin' },
     create: {
       email: 'super@school.com',
+      username: 'superadmin',
       name: 'Super Admin',
       passwordHash: hashedPassword,
       role: Role.SUPER_ADMIN,
@@ -176,9 +187,10 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@school.com' },
-    update: { role: Role.ADMIN },
+    update: { role: Role.ADMIN, username: 'admin' },
     create: {
       email: 'admin@school.com',
+      username: 'admin',
       name: 'Principal Harvard',
       passwordHash: hashedPassword,
       role: Role.ADMIN,
@@ -191,9 +203,10 @@ async function main() {
   // 3. Create Accountant
   const accountant = await prisma.user.upsert({
     where: { email: 'accountant@school.com' },
-    update: { role: Role.ACCOUNTANT },
+    update: { role: Role.ACCOUNTANT, username: 'accountant' },
     create: {
       email: 'accountant@school.com',
+      username: 'accountant',
       name: 'John Accountant',
       passwordHash: hashedPassword,
       role: Role.ACCOUNTANT,
@@ -560,33 +573,45 @@ async function main() {
 
   console.log(`👤 Created STAFF: staff@school.com`);
 
-  // Permissions catalog + role defaults
+  // Permissions catalog + role defaults (must run after users/org exist)
   await seedPermissionCatalog(prisma);
   console.log('🔐 Permission catalog and role defaults seeded');
 
-  // Backfill campus access for staff-like roles at this school
+  // Campus access for staff-like roles
+  const campusIds = (
+    await prisma.campus.findMany({
+      where: { schoolId: school.id },
+      select: { id: true },
+    })
+  ).map((c) => c.id);
+
   const staffLikeUsers = await prisma.user.findMany({
     where: {
       schoolId: school.id,
       deletedAt: null,
-      role: { in: [Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.ACCOUNTANT, Role.STAFF] },
+      role: {
+        in: [
+          Role.SUPER_ADMIN,
+          Role.ADMIN,
+          Role.TEACHER,
+          Role.ACCOUNTANT,
+          Role.STAFF,
+        ],
+      },
     },
-    select: { id: true },
+    select: { id: true, email: true },
   });
-  const campuses = await prisma.campus.findMany({
-    where: { schoolId: school.id },
-    select: { id: true },
-  });
+
   for (const u of staffLikeUsers) {
-    for (const c of campuses) {
-      await prisma.campusAccess.upsert({
-        where: { userId_campusId: { userId: u.id, campusId: c.id } },
-        update: {},
-        create: { userId: u.id, campusId: c.id },
-      });
-    }
+    await grantCampusAccess(u.id, campusIds);
   }
-  console.log(`🏫 Campus access backfilled for ${staffLikeUsers.length} users`);
+  console.log(
+    `🏫 Campus access granted to ${staffLikeUsers.length} staff-like users (${campusIds.length} campus/es)`
+  );
+
+  const permCount = await prisma.permission.count();
+  const rolePermCount = await prisma.rolePermission.count();
+  const campusAccessCount = await prisma.campusAccess.count();
 
   console.log('\n✅ ✅ ✅ Comprehensive seeding finished! ✅ ✅ ✅\n');
   console.log('📊 Summary:');
@@ -596,15 +621,18 @@ async function main() {
   console.log(`   - Teachers: ${teachers.length}`);
   console.log(`   - Parents: ${parents.length}`);
   console.log(`   - Sections: ${allSections.length}`);
+  console.log(`   - Permissions: ${permCount}`);
+  console.log(`   - Role permissions: ${rolePermCount}`);
+  console.log(`   - Campus access rows: ${campusAccessCount}`);
   console.log(`   - Attendance records: ~${students.length * 20} entries`);
   console.log(`   - Invoices: ${students.length * 3}`);
   console.log(`   - Exam results: 50`);
   console.log('\n🔑 Login credentials (all users):');
   console.log('   Password: password123');
   console.log('\n📧 Test accounts:');
-  console.log('   Super Admin: super@school.com');
-  console.log('   Admin: admin@school.com');
-  console.log('   Accountant: accountant@school.com');
+  console.log('   Super Admin: super@school.com (username: superadmin)');
+  console.log('   Admin: admin@school.com (username: admin)');
+  console.log('   Accountant: accountant@school.com (username: accountant)');
   console.log('   Teacher: teacher1@school.com (or teacher2, teacher3, etc.)');
   console.log('   Student: student1@school.com (or student2, student3, etc.)');
   console.log('   Parent: parent1@school.com (or parent2, parent3, etc.)');

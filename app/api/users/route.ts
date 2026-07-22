@@ -38,7 +38,7 @@ const userSchema = z.object({
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).optional(),
-  schoolId: z.string().min(1),
+  schoolId: z.string().optional().or(z.literal('')),
   role: z.nativeEnum(Role).optional(),
   suspended: z.boolean().optional(),
   campusIds: z.array(z.string()).optional(),
@@ -106,7 +106,16 @@ export async function POST(request: Request) {
     }
 
     const effectiveSchoolId =
-      session.user.role === 'SUPER_ADMIN' ? data.schoolId : session.user.schoolId!;
+      session.user.role === 'SUPER_ADMIN'
+        ? data.schoolId || session.user.schoolId || ''
+        : session.user.schoolId || data.schoolId || '';
+
+    if (!effectiveSchoolId) {
+      return NextResponse.json(
+        { error: 'School is required. Select a school or ensure your account has a school assigned.' },
+        { status: 400 }
+      );
+    }
 
     const role = creatingStudent
       ? Role.STUDENT
