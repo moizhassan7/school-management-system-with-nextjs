@@ -1,5 +1,6 @@
 import { PrismaClient, Role, AttendanceStatus, InvoiceStatus } from '@prisma/client';
 import crypto from 'crypto';
+import { seedPermissionCatalog } from '../lib/permissions';
 
 const prisma = new PrismaClient();
 
@@ -558,6 +559,34 @@ async function main() {
   });
 
   console.log(`👤 Created STAFF: staff@school.com`);
+
+  // Permissions catalog + role defaults
+  await seedPermissionCatalog(prisma);
+  console.log('🔐 Permission catalog and role defaults seeded');
+
+  // Backfill campus access for staff-like roles at this school
+  const staffLikeUsers = await prisma.user.findMany({
+    where: {
+      schoolId: school.id,
+      deletedAt: null,
+      role: { in: [Role.SUPER_ADMIN, Role.ADMIN, Role.TEACHER, Role.ACCOUNTANT, Role.STAFF] },
+    },
+    select: { id: true },
+  });
+  const campuses = await prisma.campus.findMany({
+    where: { schoolId: school.id },
+    select: { id: true },
+  });
+  for (const u of staffLikeUsers) {
+    for (const c of campuses) {
+      await prisma.campusAccess.upsert({
+        where: { userId_campusId: { userId: u.id, campusId: c.id } },
+        update: {},
+        create: { userId: u.id, campusId: c.id },
+      });
+    }
+  }
+  console.log(`🏫 Campus access backfilled for ${staffLikeUsers.length} users`);
 
   console.log('\n✅ ✅ ✅ Comprehensive seeding finished! ✅ ✅ ✅\n');
   console.log('📊 Summary:');

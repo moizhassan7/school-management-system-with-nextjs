@@ -1,215 +1,361 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { z, ZodIssue } from 'zod'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Button } from '@/components/ui/button'
-import { toast } from 'sonner'
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  ACTIONS,
+  MODULES,
+  permissionKey,
+  type ActionKey,
+  type ModuleKey,
+} from '@/lib/permissions';
 
-const schema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6).optional(),
-  city: z.string().optional(),
-  religion: z.string().optional(),
-  emailVerified: z.boolean().optional(),
-  profilePath: z.string().optional(),
-  schoolId: z.string().min(1),
-  gender: z.enum(['MALE','FEMALE','OTHER','UNSPECIFIED']),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  suspended: z.boolean().optional(),
-  locked: z.boolean().optional(),
-})
+const ASSIGNABLE_ROLES = [
+  'ADMIN',
+  'TEACHER',
+  'ACCOUNTANT',
+  'STAFF',
+  'STUDENT',
+  'PARENT',
+] as const;
+
+interface CampusOption {
+  id: string;
+  name: string;
+  schoolId: string;
+}
 
 interface SchoolOption {
-  id: string
-  name: string
-  initials: string
+  id: string;
+  name: string;
+  initials: string;
+  campuses: CampusOption[];
 }
 
 interface UserFormProps {
-  userId?: string
+  userId?: string;
   initialData?: {
-    name: string
-    email: string
-    city?: string | null
-    religion?: string | null
-    emailVerified: boolean
-    profilePath?: string | null
-    schoolId: string
-    gender: 'MALE'|'FEMALE'|'OTHER'|'UNSPECIFIED'
-    phone?: string | null
-    address?: string | null
-    suspended: boolean
-    locked: boolean
-  }
+    name: string;
+    email: string;
+    username?: string | null;
+    phone?: string | null;
+    schoolId: string;
+    role: string;
+    suspended: boolean;
+    campusIds?: string[];
+    permissionOverrides?: { module: string; action: string; granted: boolean }[];
+  };
 }
 
 export default function UserForm({ userId, initialData }: UserFormProps) {
-  const router = useRouter()
-  const [schools, setSchools] = useState<SchoolOption[]>([])
-  const [errors, setErrors] = useState<Record<string,string>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter();
+  const [schools, setSchools] = useState<SchoolOption[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [name, setName] = useState(initialData?.name || '');
+  const [email, setEmail] = useState(initialData?.email || '');
+  const [username, setUsername] = useState(initialData?.username || '');
+  const [phone, setPhone] = useState(initialData?.phone || '');
+  const [password, setPassword] = useState('');
+  const [schoolId, setSchoolId] = useState(initialData?.schoolId || '');
+  const [role, setRole] = useState<string>(initialData?.role || 'STAFF');
+  const [active, setActive] = useState(!(initialData?.suspended ?? false));
+  const [campusIds, setCampusIds] = useState<string[]>(initialData?.campusIds || []);
+  const [roleDefaults, setRoleDefaults] = useState<Set<string>>(new Set());
+  /** effective checked state in UI */
+  const [matrix, setMatrix] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const loadSchools = async () => {
-      const res = await fetch('/api/schools')
-      if (res.ok) {
-        const json = (await res.json()) as Array<{ id: string; name: string; initials: string }>
-        const opts: SchoolOption[] = json.map((s) => ({ id: s.id, name: s.name, initials: s.initials }))
-        setSchools(opts)
-      }
-    }
-    loadSchools()
-  }, [])
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setErrors({})
-
-    const form = new FormData(e.currentTarget)
-    const payload = {
-      name: String(form.get('name') || ''),
-      email: String(form.get('email') || ''),
-      password: form.get('password') ? String(form.get('password')) : undefined,
-      city: String(form.get('city') || ''),
-      religion: String(form.get('religion') || ''),
-      emailVerified: form.get('emailVerified') === 'on',
-      profilePath: String(form.get('profilePath') || ''),
-      schoolId: String(form.get('schoolId') || ''),
-      gender: String(form.get('gender') || 'UNSPECIFIED') as 'MALE'|'FEMALE'|'OTHER'|'UNSPECIFIED',
-      phone: String(form.get('phone') || ''),
-      address: String(form.get('address') || ''),
-      suspended: form.get('suspended') === 'on',
-      locked: form.get('locked') === 'on',
-    }
-
-    try {
-      const validated = schema.parse(payload)
-      const url = userId ? `/api/users/${userId}` : '/api/users'
-      const method = userId ? 'PUT' : 'POST'
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validated),
+    fetch('/api/schools')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        setSchools(
+          data.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            initials: s.initials,
+            campuses: (s.campuses || []).map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              schoolId: s.id,
+            })),
+          }))
+        );
+        if (!schoolId && data[0]?.id) setSchoolId(data[0].id);
       })
-      if (!res.ok) {
-        const json = await res.json()
-        if (json.errors) {
-          const issues = json.errors as ZodIssue[]
-          const fieldErrors: Record<string,string> = {}
-          issues.forEach((issue) => {
-            const k = Array.isArray(issue.path) ? String(issue.path[0]) : String(issue.path)
-            fieldErrors[k] = issue.message
-          })
-          setErrors(fieldErrors)
-          return
-        }
-        throw new Error(json.error || 'Failed to save user')
-      }
-      router.push('/users')
-      router.refresh()
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        const fieldErrors: Record<string,string> = {}
-        err.issues.forEach((i) => {
-          if (i.path && i.path.length) fieldErrors[String(i.path[0])] = i.message
-        })
-        setErrors(fieldErrors)
-      } else {
-        toast.error(err instanceof Error ? err.message : 'Error')
-      }
-    } finally {
-      setIsSubmitting(false)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!role || role === 'SUPER_ADMIN') {
+      setRoleDefaults(new Set());
+      return;
     }
-  }
+    fetch(`/api/permissions/role-defaults?role=${role}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const defaults = new Set<string>(data.permissions || []);
+        setRoleDefaults(defaults);
+
+        const next: Record<string, boolean> = {};
+        for (const module of MODULES) {
+          for (const action of ACTIONS) {
+            const key = permissionKey(module, action);
+            next[key] = defaults.has(key);
+          }
+        }
+
+        // Apply existing overrides on edit
+        for (const o of initialData?.permissionOverrides || []) {
+          const key = permissionKey(o.module, o.action);
+          next[key] = o.granted;
+        }
+        setMatrix(next);
+      })
+      .catch(() => {});
+  }, [role, userId]);
+
+  const campusesForSchool = useMemo(
+    () => schools.find((s) => s.id === schoolId)?.campuses || [],
+    [schools, schoolId]
+  );
+
+  useEffect(() => {
+    // Drop campus selections that don't belong to the selected school
+    setCampusIds((prev) =>
+      prev.filter((id) => campusesForSchool.some((c) => c.id === id))
+    );
+  }, [schoolId, campusesForSchool]);
+
+  const toggleCampus = (id: string) => {
+    setCampusIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const togglePerm = (module: ModuleKey, action: ActionKey) => {
+    const key = permissionKey(module, action);
+    setMatrix((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const resetToRoleDefaults = () => {
+    const next: Record<string, boolean> = {};
+    for (const module of MODULES) {
+      for (const action of ACTIONS) {
+        const key = permissionKey(module, action);
+        next[key] = roleDefaults.has(key);
+      }
+    }
+    setMatrix(next);
+    toast.success('Permissions reset to role defaults');
+  };
+
+  const buildOverrides = () => {
+    const overrides: { module: string; action: string; granted: boolean }[] = [];
+    for (const module of MODULES) {
+      for (const action of ACTIONS) {
+        const key = permissionKey(module, action);
+        const current = !!matrix[key];
+        const def = roleDefaults.has(key);
+        if (current !== def) {
+          overrides.push({ module, action, granted: current });
+        }
+      }
+    }
+    return overrides;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      if (!userId && password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
+
+      const payload: Record<string, unknown> = {
+        name,
+        email,
+        username: username || null,
+        phone,
+        schoolId,
+        role,
+        suspended: !active,
+        campusIds,
+        permissionOverrides: buildOverrides(),
+      };
+      if (password) payload.password = password;
+
+      const res = await fetch(userId ? `/api/users/${userId}` : '/api/users', {
+        method: userId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to save user');
+
+      toast.success(userId ? 'User updated' : 'User created');
+      router.push('/users');
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 max-w-xl mx-auto p-6 bg-white rounded-lg shadow-md">
-      <div>
-        <Label htmlFor="name">Name</Label>
-        <Input id="name" name="name" defaultValue={initialData?.name} />
-        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-      </div>
-      <div>
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" defaultValue={initialData?.email} />
-        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-      </div>
-      <div>
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" />
-        {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="city">City</Label>
-          <Input id="city" name="city" defaultValue={initialData?.city ?? ''} />
-        </div>
-        <div>
-          <Label htmlFor="religion">Religion</Label>
-          <Input id="religion" name="religion" defaultValue={initialData?.religion ?? ''} />
-        </div>
-      </div>
-      <div>
-        <Label htmlFor="profilePath">Profile Path</Label>
-        <Input id="profilePath" name="profilePath" defaultValue={initialData?.profilePath ?? ''} />
-      </div>
-      <div>
-        <Label htmlFor="schoolId">School</Label>
-        <select id="schoolId" name="schoolId" defaultValue={initialData?.schoolId} className="mt-1 block w-full rounded-md border-gray-300 p-2 border">
-          <option value="">Select school</option>
-          {schools.map((s) => (
-            <option key={s.id} value={s.id}>{s.initials} — {s.name}</option>
-          ))}
-        </select>
-        {errors.schoolId && <p className="text-red-500 text-xs mt-1">{errors.schoolId}</p>}
-      </div>
-      <div>
-        <Label htmlFor="gender">Gender</Label>
-        <select id="gender" name="gender" defaultValue={initialData?.gender ?? 'UNSPECIFIED'} className="mt-1 block w-full rounded-md border-gray-300 p-2 border">
-          <option value="UNSPECIFIED">Unspecified</option>
-          <option value="MALE">Male</option>
-          <option value="FEMALE">Female</option>
-          <option value="OTHER">Other</option>
-        </select>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" defaultValue={initialData?.phone ?? ''} />
-        </div>
-        <div>
-          <Label htmlFor="address">Address</Label>
-          <Input id="address" name="address" defaultValue={initialData?.address ?? ''} />
-        </div>
-      </div>
-      <div className="flex items-center gap-6">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" name="emailVerified" defaultChecked={initialData?.emailVerified ?? false} />
-          <span>Email Verified</span>
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" name="suspended" defaultChecked={initialData?.suspended ?? false} />
-          <span>Suspended</span>
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" name="locked" defaultChecked={initialData?.locked ?? false} />
-          <span>Locked</span>
-        </label>
-      </div>
-      <div className="flex gap-2">
-        <Button type="submit" disabled={isSubmitting} className="flex-1">
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-5xl">
+      <Card>
+        <CardHeader>
+          <CardTitle>1. User Account</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label>Full Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div>
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div>
+            <Label>Username</Label>
+            <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="optional login name" />
+          </div>
+          <div>
+            <Label>Phone</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+          <div>
+            <Label>{userId ? 'New Password (optional)' : 'Password'}</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required={!userId}
+            />
+          </div>
+          <div>
+            <Label>School</Label>
+            <Select value={schoolId} onValueChange={setSchoolId}>
+              <SelectTrigger><SelectValue placeholder="Select school" /></SelectTrigger>
+              <SelectContent>
+                {schools.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Role</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ASSIGNABLE_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>{r.replace('_', ' ')}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-3 pt-6">
+            <Switch checked={active} onCheckedChange={setActive} id="active" />
+            <Label htmlFor="active">Account Active</Label>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>2. Campus Access</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {campusesForSchool.length === 0 ? (
+            <p className="text-sm text-slate-500">No campuses for this school.</p>
+          ) : (
+            campusesForSchool.map((c) => (
+              <label key={c.id} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 cursor-pointer">
+                <Checkbox
+                  checked={campusIds.includes(c.id)}
+                  onCheckedChange={() => toggleCampus(c.id)}
+                />
+                <span className="font-medium">{c.name}</span>
+                <span className="text-xs text-slate-400 ml-auto">
+                  {campusIds.includes(c.id) ? 'Allowed' : 'Blocked'}
+                </span>
+              </label>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>3. Role & Permissions</CardTitle>
+          <Button type="button" variant="outline" size="sm" onClick={resetToRoleDefaults}>
+            Reset to role defaults
+          </Button>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="py-2 pr-4">Module</th>
+                {ACTIONS.map((a) => (
+                  <th key={a} className="py-2 px-2 text-center font-medium">{a}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MODULES.map((module) => (
+                <tr key={module} className="border-b last:border-0">
+                  <td className="py-2 pr-4 font-medium">{module}</td>
+                  {ACTIONS.map((action) => {
+                    const key = permissionKey(module, action);
+                    const checked = !!matrix[key];
+                    const isDefault = roleDefaults.has(key);
+                    return (
+                      <td key={action} className="py-2 px-2 text-center">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => togglePerm(module, action)}
+                        />
+                        {checked !== isDefault && (
+                          <span className="block text-[10px] text-amber-600">override</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-3">
+        <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Saving...' : userId ? 'Update User' : 'Create User'}
         </Button>
-        <Button type="button" variant="outline" className="flex-1" onClick={() => router.push('/users')}>
+        <Button type="button" variant="outline" onClick={() => router.push('/users')}>
           Cancel
         </Button>
       </div>
     </form>
-  )
+  );
 }

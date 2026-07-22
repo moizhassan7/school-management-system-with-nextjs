@@ -57,6 +57,14 @@ enum Role {
   ACCOUNTANT
   STAFF
 }
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  APPROVE
+}
 enum ExamType {
   TERM        // Detailed: Marks per question
   CLASS_TEST  // Simple: Total Obtained / Total Marks
@@ -89,6 +97,7 @@ model School {
   email     String
   phone     String
   logoPath  String?
+  isActive  Boolean  @default(true)
   
   campuses  Campus[]
   users     User[]
@@ -107,6 +116,7 @@ model ClassGroup {
   description  String?
   campusId     String
   campus       Campus         @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  isActive     Boolean        @default(true)
   
   classes      Class[]
   subjectGroups SubjectGroup[]
@@ -143,6 +153,7 @@ model Class {
   
   classGroupId   String
   classGroup     ClassGroup    @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  isActive       Boolean       @default(true)
   
   sections       Section[]
   studentRecords StudentRecord[]
@@ -198,7 +209,9 @@ model Campus {
   email       String?
   schoolId    String
   school      School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  isActive    Boolean      @default(true)
   classGroups ClassGroup[]
+  campusAccess CampusAccess[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -208,6 +221,7 @@ model Section {
   name      String
   classId   String
   myClass   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  isActive  Boolean @default(true)
   students  StudentRecord[]
   yearRecords AcademicYearStudentRecord[]
   classTeacherId String?
@@ -224,6 +238,7 @@ model User {
   id                String   @id @default(cuid())
   name              String
   email             String   @unique
+  username          String?  @unique
   passwordHash      String
   city              String?
   religion          String?
@@ -249,10 +264,54 @@ model User {
   attendance        Attendance[]     @relation("StudentAttendance")
   recordedAttendance Attendance[]    @relation("AttendanceRecorder")
   staffRecord StaffRecord? // Relation to Staff
+  campusAccess      CampusAccess[]
+  userPermissions   UserPermission[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   role Role @default(STUDENT)
   @@index([schoolId])
+}
+
+// --- RBAC ---
+
+model Permission {
+  id               String           @id @default(cuid())
+  module           String
+  action           PermissionAction
+  rolePermissions  RolePermission[]
+  userPermissions  UserPermission[]
+
+  @@unique([module, action])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+}
+
+model UserPermission {
+  id           String     @id @default(cuid())
+  userId       String
+  permissionId String
+  granted      Boolean    @default(true)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+}
+
+model CampusAccess {
+  id       String @id @default(cuid())
+  userId   String
+  campusId String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus   Campus @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campusId])
 }
 
 model ParentRecord {

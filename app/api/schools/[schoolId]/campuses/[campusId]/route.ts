@@ -7,6 +7,7 @@ const campusSchema = z.object({
     address: z.string().min(1, 'Address is required'),
     phone: z.string().min(1, 'Phone number is required'),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
+    isActive: z.boolean().optional(),
 });
 
 export async function GET(
@@ -68,8 +69,13 @@ export async function PUT(
         const campus = await prisma.campus.update({
             where: { id: campusId },
             data: {
-                ...validatedData,
+                name: validatedData.name,
+                address: validatedData.address,
+                phone: validatedData.phone,
                 email: validatedData.email || null,
+                ...(validatedData.isActive !== undefined
+                  ? { isActive: validatedData.isActive }
+                  : {}),
             },
         });
 

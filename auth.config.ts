@@ -1,41 +1,48 @@
 import type { NextAuthConfig } from 'next-auth';
+import { moduleForPath, can } from '@/lib/permissions';
 
 export const authConfig = {
   pages: {
-    signIn: '/login', // Redirect here if not logged in
+    signIn: '/login',
   },
   callbacks: {
-    // 1. Check if user is allowed to visit the page
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const role = auth?.user?.role as string | undefined;
-
       const { pathname } = nextUrl;
       const isLogin = pathname.startsWith('/login');
 
-      // Enforce authentication for all non-login pages
       if (!isLoggedIn && !isLogin) return false;
-
       return true;
     },
-    // 2. Add Role to the Token
     jwt({ token, user }) {
       if (user) {
         token.role = user.role;
         token.id = user.id;
         token.schoolId = user.schoolId;
+        token.permissions = user.permissions ?? [];
+        token.campusIds = user.campusIds ?? [];
       }
       return token;
     },
-    // 3. Add Role to the Session (so the client sees it)
     session({ session, token }) {
       if (token && session.user) {
         session.user.role = token.role as string;
         session.user.id = token.id as string;
         session.user.schoolId = token.schoolId as string;
+        session.user.permissions = (token.permissions as string[]) ?? [];
+        session.user.campusIds = (token.campusIds as string[]) ?? [];
       }
       return session;
-    }
+    },
   },
-  providers: [], // Configured in auth.ts
+  providers: [],
 } satisfies NextAuthConfig;
+
+export function canViewPath(
+  user: { role?: string; permissions?: string[] } | undefined,
+  pathname: string
+) {
+  const module = moduleForPath(pathname);
+  if (!module) return true;
+  return can(user, module, 'VIEW');
+}

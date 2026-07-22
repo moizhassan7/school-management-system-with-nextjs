@@ -30,13 +30,17 @@ import {
   FileSpreadsheet,
   FileBarChart,
   Home,
+  Shield,
 } from "lucide-react";
+import { can } from "@/lib/permissions";
 
 interface UserSession {
   name?: string | null;
   email?: string | null;
   role?: string;
   schoolId?: string;
+  permissions?: string[];
+  campusIds?: string[];
 }
 
 interface SidebarProps {
@@ -75,11 +79,15 @@ export default function Sidebar({ user }: SidebarProps) {
   const isActive = (path: string) => pathname === path;
   const isPathActive = (path: string) => pathname.startsWith(path);
 
-  // --- Permissions ---
-  const isSuperAdmin = userRole === "SUPER_ADMIN";
-  const isAdmin = userRole === "ADMIN" || isSuperAdmin;
-  const isAccountant = userRole === "ACCOUNTANT" || isSuperAdmin;
-  const isTeacher = userRole === "TEACHER" || isAdmin;
+  // --- Permissions (module-based; SUPER_ADMIN bypass inside can()) ---
+  const canDashboard = can(user, "DASHBOARD", "VIEW");
+  const canStudents = can(user, "STUDENTS", "VIEW");
+  const canTeachers = can(user, "TEACHERS", "VIEW");
+  const canFees = can(user, "FEES", "VIEW");
+  const canExams = can(user, "EXAMS", "VIEW");
+  const canAttendance = can(user, "ATTENDANCE", "VIEW");
+  const canConfig = can(user, "CONFIGURATION", "VIEW");
+  const canUsers = can(user, "USERS", "VIEW");
   const isStudent = userRole === "STUDENT";
   const isParent = userRole === "PARENT";
   const isStaff = userRole === "STAFF";
@@ -111,6 +119,7 @@ export default function Sidebar({ user }: SidebarProps) {
       {/* 2. Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
         {/* --- Core --- */}
+        {canDashboard && (
         <Link
           href="/"
           className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -122,9 +131,9 @@ export default function Sidebar({ user }: SidebarProps) {
           <Home className="w-4 h-4" />
           Dashboard
         </Link>
+        )}
 
-        {/* Students menu - visible for admin and teachers */}
-        {(isAdmin || isTeacher) && (
+        {canStudents && (
           <Link
             href="/students"
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -138,8 +147,7 @@ export default function Sidebar({ user }: SidebarProps) {
           </Link>
         )}
 
-        {/* Staff menu - visible for admin */}
-        {isAdmin && (
+        {canTeachers && (
           <Link
             href="/staff"
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -150,6 +158,48 @@ export default function Sidebar({ user }: SidebarProps) {
           >
             <Users className="w-4 h-4" />
             Staff
+          </Link>
+        )}
+
+        {canAttendance && !isStaff && (
+          <Link
+            href="/attendance"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isPathActive("/attendance")
+                ? "bg-primary text-white"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Attendance
+          </Link>
+        )}
+
+        {canUsers && (
+          <Link
+            href="/users"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isPathActive("/users")
+                ? "bg-primary text-white"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            User Management
+          </Link>
+        )}
+
+        {canConfig && (
+          <Link
+            href="/configuration"
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              isPathActive("/configuration")
+                ? "bg-primary text-white"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            Configuration
           </Link>
         )}
 
@@ -249,7 +299,7 @@ export default function Sidebar({ user }: SidebarProps) {
         )}
 
         {/* --- Finance Module --- */}
-        {isAccountant && (
+        {canFees && (
           <div>
             <button
               onClick={() => setIsFinanceExpanded(!isFinanceExpanded)}
@@ -326,7 +376,7 @@ export default function Sidebar({ user }: SidebarProps) {
         )}
 
         {/* --- Exams Module --- */}
-        {isTeacher && (
+        {canExams && (
           <div>
             <button
               onClick={() => setIsExamsExpanded(!isExamsExpanded)}
@@ -367,7 +417,7 @@ export default function Sidebar({ user }: SidebarProps) {
                 >
                   <Award className="w-3.5 h-3.5" /> Grading Rules
                 </Link>
-                {isAdmin && (
+                {can(user, "EXAMS", "CREATE") && (
                   <Link
                     href="/exams/new"
                     className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -404,24 +454,23 @@ export default function Sidebar({ user }: SidebarProps) {
           </div>
         )}
 
-        {/* --- Hierarchy Tree (Admin) --- */}
-        {isAdmin && (
+        {/* --- Configuration / Hierarchy Tree --- */}
+        {canConfig && (
           <div className="pt-4">
             <div className="px-3 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Hierarchy
+              Organization
             </div>
 
-            {/* Hierarchy Actions */}
             <Link
-              href="/schools/new"
+              href="/configuration"
               className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive("/schools/new")
+                isPathActive("/configuration")
                   ? "bg-primary text-white"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
-              <Plus className="w-4 h-4" />
-              Add School
+              <Settings className="w-4 h-4" />
+              Master Setup
             </Link>
             <Link
               href="/subject-groups"

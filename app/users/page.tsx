@@ -1,86 +1,141 @@
-"use client"
+'use client';
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  phone?: string | null
-  suspended: boolean
-  locked: boolean
-  school?: { id: string; initials: string; name: string } | null
-}
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
-  const load = async () => {
-    setLoading(true)
-    const res = await fetch('/api/users')
-    if (res.ok) {
-      const json = await res.json()
-      setUsers(json)
-    }
-    setLoading(false)
-  }
+  const load = () => {
+    setLoading(true);
+    fetch('/api/users')
+      .then((r) => r.json())
+      .then((data) => setUsers(Array.isArray(data) ? data : []))
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false));
+  };
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      (u) =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.username?.toLowerCase().includes(q) ||
+        u.role?.toLowerCase().includes(q)
+    );
+  }, [users, search]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this user?')) return
-    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
-    if (res.ok) load()
-  }
+    if (!confirm('Deactivate and soft-delete this user?')) return;
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json();
+      toast.error(data.error || 'Delete failed');
+      return;
+    }
+    toast.success('User deleted');
+    load();
+  };
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Users</h1>
+    <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">User Management</h1>
+          <p className="text-slate-500">Accounts, campus access, and module permissions.</p>
+        </div>
         <Link href="/users/new">
-          <Button>Create User</Button>
+          <Button className="gap-2"><Plus className="h-4 w-4" /> Add User</Button>
         </Link>
       </div>
-      {loading ? (
-        <div>Loading...</div>
-      ) : users.length === 0 ? (
-        <div className="text-gray-500">No users</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white border">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="p-2 text-left border">Name</th>
-                <th className="p-2 text-left border">Email</th>
-                <th className="p-2 text-left border">Phone</th>
-                <th className="p-2 text-left border">School</th>
-                <th className="p-2 text-left border">Status</th>
-                <th className="p-2 text-left border">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="p-2 border">{u.name}</td>
-                  <td className="p-2 border">{u.email}</td>
-                  <td className="p-2 border">{u.phone ?? ''}</td>
-                  <td className="p-2 border">{u.school ? `${u.school.initials}` : ''}</td>
-                  <td className="p-2 border">
-                    {u.suspended ? 'Suspended' : 'Active'}{u.locked ? ' • Locked' : ''}
-                  </td>
-                  <td className="p-2 border space-x-2">
-                    <Link href={`/users/${u.id}/edit`} className="text-indigo-600">Edit</Link>
-                    <button onClick={() => handleDelete(u.id)} className="text-red-600">Delete</button>
-                  </td>
-                </tr>
+
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Input
+          className="pl-10"
+          placeholder="Search name, email, username, role..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="bg-white border rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="py-16 text-center text-slate-500">Loading users...</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>User</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>School</TableHead>
+                <TableHead>Campuses</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    <div className="font-medium">{u.name}</div>
+                    <div className="text-xs text-slate-500">{u.email}</div>
+                    {u.username && (
+                      <div className="text-xs text-slate-400">@{u.username}</div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{u.role}</Badge>
+                  </TableCell>
+                  <TableCell>{u.school?.initials || u.school?.name || '—'}</TableCell>
+                  <TableCell>{u.campusAccess?.length ?? 0}</TableCell>
+                  <TableCell>
+                    <Badge variant={u.suspended ? 'destructive' : 'default'}>
+                      {u.suspended ? 'Inactive' : 'Active'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Link href={`/users/${u.id}/edit`}>
+                      <Button variant="outline" size="icon"><Pencil className="h-4 w-4" /></Button>
+                    </Link>
+                    <Button variant="outline" size="icon" onClick={() => handleDelete(u.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-12 text-slate-500">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </div>
-  )
+  );
 }

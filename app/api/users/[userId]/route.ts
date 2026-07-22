@@ -1,44 +1,56 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
-import crypto from 'crypto'
-import { auth } from '@/auth'
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { z } from 'zod';
+import crypto from 'crypto';
+import { Role } from '@prisma/client';
+import { requirePermission } from '@/lib/authz';
+import {
+  permissionKey,
+  resolveCampusIds,
+  resolveUserPermissions,
+} from '@/lib/permissions';
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  username: z.string().min(3).optional().nullable().or(z.literal('')),
   password: z.string().min(6).optional(),
-  city: z.string().optional().or(z.literal('')),
-  religion: z.string().optional().or(z.literal('')),
-  emailVerified: z.boolean().optional(),
-  profilePath: z.string().optional().or(z.literal('')),
-  schoolId: z.string().min(1).optional(),
-  gender: z.enum(['MALE','FEMALE','OTHER','UNSPECIFIED']).optional(),
   phone: z.string().optional().or(z.literal('')),
-  address: z.string().optional().or(z.literal('')),
+  schoolId: z.string().min(1).optional(),
+  role: z.nativeEnum(Role).optional(),
   suspended: z.boolean().optional(),
   locked: z.boolean().optional(),
-})
+  campusIds: z.array(z.string()).optional(),
+  permissionOverrides: z
+    .array(
+      z.object({
+        module: z.string(),
+        action: z.string(),
+        granted: z.boolean(),
+      })
+    )
+    .optional(),
+});
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const session = await auth();
-    const role = session?.user?.role;
-    const schoolId = session?.user?.schoolId;
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    const { userId } = await params
-    
-    // FETCH USER WITH PARENTS (KINSHIP) INCLUDED
+    const { error } = await requirePermission('USERS', 'VIEW');
+    if (error) return error;
+
+    const { userId } = await params;
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
         school: true,
+        campusAccess: {
+          include: { campus: { select: { id: true, name: true, schoolId: true } } },
+        },
+        userPermissions: {
+          include: { permission: true },
+        },
         studentRecord: {
           include: {
             academicYearRecords: {
@@ -48,43 +60,48 @@ export async function GET(
             section: true,
             feeStructure: {
               include: {
-                items: {
+                items: { include: { feeHead: true }, orderBy: { createdAt: 'asc' } },
+              },
+            },
+            parents: {
+              include: {
+                parentRecord: {
                   include: {
-                    feeHead: true,
-                  },
-                  orderBy: {
-                    createdAt: 'asc',
+                    user: {
+                      select: { id: true, name: true, phone: true, email: true },
+                    },
                   },
                 },
               },
             },
-            // FIX: Ensure parents are fetched with user details
-            parents: {
-              include: {
-                parentRecord: {
-                    include: {
-                        user: {
-                            select: { id: true, name: true, phone: true, email: true }
-                        }
-                    }
-                }
-              }
-            }
           },
         },
       },
-    })
+    });
 
     if (!user || user.deletedAt) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-    if (role !== 'SUPER_ADMIN' && user.schoolId !== schoolId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-    return NextResponse.json(user)
+
+    const [effectivePermissions, campusIds] = await Promise.all([
+      resolveUserPermissions(prisma, user.id, user.role),
+      resolveCampusIds(prisma, user.id),
+    ]);
+
+    return NextResponse.json({
+      ...user,
+      passwordHash: undefined,
+      effectivePermissions,
+      campusIds,
+      permissionOverrides: user.userPermissions.map((up) => ({
+        module: up.permission.module,
+        action: up.permission.action,
+        granted: up.granted,
+      })),
+    });
   } catch (error) {
-    console.error("GET User Error:", error);
-    return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })
+    console.error('GET User Error:', error);
+    return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 });
   }
 }
 
@@ -93,89 +110,109 @@ export async function PUT(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const session = await auth();
-    const role = session?.user?.role;
-    const schoolId = session?.user?.schoolId;
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    const { userId } = await params
-    const body = await request.json()
-    const data = updateSchema.parse(body)
+    const { session, error } = await requirePermission('USERS', 'EDIT');
+    if (error) return error;
 
-    const existing = await prisma.user.findUnique({ where: { id: userId } })
+    const { userId } = await params;
+    const body = await request.json();
+    const data = updateSchema.parse(body);
+
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
     if (!existing || existing.deletedAt) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-    if (role !== 'SUPER_ADMIN' && existing.schoolId !== schoolId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    if (data.role === Role.SUPER_ADMIN && session!.user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Cannot assign SUPER_ADMIN' }, { status: 403 });
     }
 
     const passwordHash = data.password
       ? crypto.createHash('sha256').update(data.password).digest('hex')
-      : undefined
+      : undefined;
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        name: data.name,
-        email: data.email,
-        passwordHash,
-        city: data.city === '' ? null : data.city,
-        religion: data.religion === '' ? null : data.religion,
-        emailVerified: data.emailVerified ?? existing.emailVerified,
-        emailVerifiedAt:
-          data.emailVerified === undefined
-            ? existing.emailVerifiedAt
-            : data.emailVerified
-            ? new Date()
-            : null,
-        profilePath: data.profilePath === '' ? null : data.profilePath,
-        schoolId: data.schoolId,
-        gender: data.gender,
-        phone: data.phone === '' ? null : data.phone,
-        address: data.address === '' ? null : data.address,
-        suspended: data.suspended ?? existing.suspended,
-        locked: data.locked ?? existing.locked,
-      },
-    })
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: {
+          name: data.name,
+          email: data.email,
+          username:
+            data.username === undefined
+              ? undefined
+              : data.username
+                ? data.username
+                : null,
+          passwordHash,
+          phone: data.phone === undefined ? undefined : data.phone || null,
+          schoolId: data.schoolId,
+          role: data.role,
+          suspended: data.suspended,
+          locked: data.locked,
+        },
+      });
 
-    return NextResponse.json(updated)
+      if (data.campusIds) {
+        await tx.campusAccess.deleteMany({ where: { userId } });
+        if (data.campusIds.length) {
+          await tx.campusAccess.createMany({
+            data: data.campusIds.map((campusId) => ({ userId, campusId })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      if (data.permissionOverrides) {
+        await tx.userPermission.deleteMany({ where: { userId } });
+        const perms = await tx.permission.findMany();
+        const byKey = new Map(
+          perms.map((p) => [permissionKey(p.module, p.action), p.id])
+        );
+        for (const o of data.permissionOverrides) {
+          const permissionId = byKey.get(permissionKey(o.module, o.action));
+          if (!permissionId) continue;
+          await tx.userPermission.create({
+            data: { userId, permissionId, granted: o.granted },
+          });
+        }
+      }
+
+      return user;
+    });
+
+    return NextResponse.json(updated);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ errors: error.issues }, { status: 400 })
+      return NextResponse.json({ errors: error.issues }, { status: 400 });
     }
-    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
+    if ((error as { code?: string })?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Email or username already exists' },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
   }
 }
 
 export async function DELETE(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const session = await auth();
-    const role = session?.user?.role;
-    const schoolId = session?.user?.schoolId;
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (!['ADMIN', 'SUPER_ADMIN'].includes(String(role))) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    const { userId } = await params
-    const existing = await prisma.user.findUnique({ where: { id: userId } })
+    const { error } = await requirePermission('USERS', 'DELETE');
+    if (error) return error;
+
+    const { userId } = await params;
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
     if (!existing || existing.deletedAt) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-    if (role !== 'SUPER_ADMIN' && existing.schoolId !== schoolId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     await prisma.user.update({
       where: { id: userId },
-      data: { deletedAt: new Date() },
-    })
-    return NextResponse.json({ message: 'User deleted' })
+      data: { deletedAt: new Date(), suspended: true },
+    });
+    return NextResponse.json({ message: 'User deleted' });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
   }
 }

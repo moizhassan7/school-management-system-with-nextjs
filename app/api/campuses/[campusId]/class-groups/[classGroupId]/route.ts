@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 const classGroupSchema = z.object({
     name: z.string().min(1, 'Name is required'),
     description: z.string().optional(),
+    isActive: z.boolean().optional(),
 });
 
 // GET a specific class group

@@ -32,8 +32,8 @@ export default function LoginPage() {
         <CardContent>
           <form action={dispatch} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <Input type="email" name="email" placeholder="admin@school.com" required />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email or Username</label>
+              <Input type="text" name="email" placeholder="admin@school.com or username" required />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
