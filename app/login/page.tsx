@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { authenticate } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,13 @@ import { GraduationCap } from 'lucide-react';
 
 export default function LoginPage() {
   const [errorMessage, dispatch] = useFormState(authenticate, undefined);
+
+  useEffect(() => {
+    if (errorMessage === 'SUCCESS') {
+      // Full reload so layout/session/sidebar hydrate with the new cookie
+      window.location.assign('/');
+    }
+  }, [errorMessage]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -32,7 +40,7 @@ export default function LoginPage() {
               <Input type="password" name="password" placeholder="••••••" required />
             </div>
             <LoginButton />
-            {errorMessage && (
+            {errorMessage && errorMessage !== 'SUCCESS' && (
               <div className="text-red-500 text-sm text-center">{errorMessage}</div>
             )}
           </form>

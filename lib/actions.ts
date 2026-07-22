@@ -2,11 +2,18 @@
 
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
-import { redirect } from 'next/navigation';
 
 export async function authenticate(prevState: string | undefined, formData: FormData) {
   try {
-    await signIn('credentials', formData, { redirectTo: '/' });
+    // redirect: false so we can full-reload on the client after the cookie is set.
+    // Soft Next.js redirects leave root layout/session stale (sidebar missing until refresh).
+    await signIn('credentials', {
+      email: formData.get('email'),
+      password: formData.get('password'),
+      redirect: false,
+    });
+
+    return 'SUCCESS';
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {

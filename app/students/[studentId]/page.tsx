@@ -24,10 +24,14 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
 
     useEffect(() => {
         setLoading(true);
-        fetch(`/api/users/${studentId}`)
-            .then(res => {
-                if(!res.ok) throw new Error("Student not found");
-                return res.json();
+        setError('');
+        fetch(`/api/students/${studentId}`)
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.error || 'Student not found');
+                }
+                return data;
             })
             .then(data => {
                 setStudent(data);
@@ -48,7 +52,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
 
     if (error || !student) return (
         <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-            <h2 className="text-xl font-semibold text-red-600">Student not found</h2>
+            <h2 className="text-xl font-semibold text-red-600">{error || 'Student not found'}</h2>
             <Link href="/students">
                 <Button variant="outline">Back to Directory</Button>
             </Link>
@@ -76,7 +80,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
             }
 
             toast.success(data.message || 'Fee structure updated');
-            const refreshed = await fetch(`/api/users/${student.id}`);
+            const refreshed = await fetch(`/api/students/${student.id}`);
             if (refreshed.ok) {
                 setStudent(await refreshed.json());
             }

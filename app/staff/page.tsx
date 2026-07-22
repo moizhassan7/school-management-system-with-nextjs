@@ -14,16 +14,19 @@ export default function StaffPage() {
   const [search, setSearch] = useState('');
 
   const fetchStaff = () => {
-    fetch('/api/staff').then(res => res.json()).then(setStaff);
+    fetch('/api/staff')
+      .then((res) => res.json())
+      .then((data) => setStaff(Array.isArray(data) ? data : []))
+      .catch(() => setStaff([]));
   };
 
   useEffect(() => {
     fetchStaff();
   }, []);
 
-  const filteredStaff = staff.filter(s => 
-    s.user.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.designation.toLowerCase().includes(search.toLowerCase())
+  const filteredStaff = (Array.isArray(staff) ? staff : []).filter((s) =>
+    s.user?.name?.toLowerCase().includes(search.toLowerCase()) ||
+    s.designation?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (

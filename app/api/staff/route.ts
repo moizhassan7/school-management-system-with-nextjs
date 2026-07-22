@@ -35,28 +35,32 @@ const staffSchema = z.object({
 export async function GET() {
   try {
     const session = await auth();
-    if (!session?.user?.schoolId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!session?.user) {
+      return NextResponse.json([], { status: 401 });
     }
+
     const staff = await prisma.staffRecord.findMany({
       where: {
         user: {
-          schoolId: session.user.schoolId,
-          deletedAt: null
-        }
+          ...(session.user.schoolId
+            ? { schoolId: session.user.schoolId }
+            : {}),
+          deletedAt: null,
+        },
       },
       include: {
         user: { select: { name: true, email: true, phone: true, role: true } },
-        sectionsIncharged: { include: { myClass: true } }, // Fetch class incharge details
-        assignments: { 
-            include: { subject: true, myClass: true, section: true } 
-        }
+        sectionsIncharged: { include: { myClass: true } },
+        assignments: {
+          include: { subject: true, myClass: true, section: true },
+        },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(staff);
   } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch staff" }, { status: 500 });
+    console.error('Error fetching staff:', error);
+    return NextResponse.json([], { status: 500 });
   }
 }
 
