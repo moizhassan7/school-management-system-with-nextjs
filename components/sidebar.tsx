@@ -5,9 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
-import { useSidebar } from "@/contexts/SidebarContext";
 import {
-  LayoutDashboard,
   Users,
   Banknote,
   Calendar,
@@ -15,24 +13,19 @@ import {
   LogOut,
   ChevronRight,
   ChevronDown,
-  School,
-  Building2,
-  Layers,
   BookOpen,
   FileText,
   Award,
   ClipboardCheck,
-  BarChart3,
-  BookCopy,
-  Network,
-  Plus,
   CreditCard,
   FileSpreadsheet,
   FileBarChart,
   Home,
   Shield,
+  Plus,
 } from "lucide-react";
 import { can } from "@/lib/permissions";
+import { useSchoolBrand } from "@/contexts/SchoolBrandContext";
 
 interface UserSession {
   name?: string | null;
@@ -49,32 +42,12 @@ interface SidebarProps {
 
 export default function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const { schools } = useSidebar(); // Access the full hierarchy tree
+  const { brand } = useSchoolBrand();
   const userRole = user.role || "GUEST";
-
-  // --- Toggle States ---
-  const [expandedSchools, setExpandedSchools] = useState<Set<string>>(
-    new Set()
-  );
-  const [expandedCampuses, setExpandedCampuses] = useState<Set<string>>(
-    new Set()
-  );
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Module States
   const [isFinanceExpanded, setIsFinanceExpanded] = useState(false);
   const [isExamsExpanded, setIsExamsExpanded] = useState(false);
-
-  // --- Helpers ---
-  const toggle = (
-    id: string,
-    set: Set<string>,
-    setFn: (s: Set<string>) => void
-  ) => {
-    const newSet = new Set(set);
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id);
-    setFn(newSet);
-  };
 
   const isActive = (path: string) => pathname === path;
   const isPathActive = (path: string) => pathname.startsWith(path);
@@ -96,202 +69,109 @@ export default function Sidebar({ user }: SidebarProps) {
     await signOut({ callbackUrl: "/login" });
   };
 
+  const linkClass = (active: boolean) =>
+    `flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors duration-200 ${
+      active
+        ? "bg-primary text-primary-foreground shadow-sm"
+        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+    }`;
+
+  const subLinkClass = (active: boolean) =>
+    `flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+      active
+        ? "bg-primary/10 font-medium text-primary"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    }`;
+
   return (
-    <aside className="w-64 bg-white dark:bg-[#1a2632] border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen sticky top-0 z-20 transition-colors duration-200">
+    <aside className="sticky top-0 z-20 flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-colors duration-200">
       {/* 1. Brand / Header */}
-      <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
+      <div className="border-b border-sidebar-border p-5">
+        <div className="flex items-center gap-3 font-heading text-lg font-semibold tracking-tight text-foreground">
           <Image
-            src="/logo/logo.png"
-            alt="Harvard School Sargodha Logo"
+            src={brand.logoPath || "/logo/logo.png"}
+            alt={`${brand.name} Logo`}
             width={28}
             height={28}
             className="h-7 w-7 object-contain"
             priority
+            unoptimized={brand.logoPath?.startsWith("/uploads/")}
           />
-          <span>Harvard School</span>
+          <span className="truncate">{brand.name}</span>
         </div>
-        <div className="mt-1 text-xs font-semibold text-slate-500 uppercase tracking-widest">
+        <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {userRole.replace("_", " ")} Portal
         </div>
       </div>
 
       {/* 2. Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-700">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4 scrollbar-thin">
         {/* --- Core --- */}
         {canDashboard && (
-        <Link
-          href="/"
-          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-            isActive("/")
-              ? "bg-primary text-white"
-              : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          }`}
-        >
+        <Link href="/" className={linkClass(isActive("/"))}>
           <Home className="w-4 h-4" />
           Dashboard
         </Link>
         )}
 
         {canStudents && (
-          <Link
-            href="/students"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isPathActive("/students")
-                ? "bg-primary text-white"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
+          <Link href="/students" className={linkClass(isPathActive("/students"))}>
             <Users className="w-4 h-4" />
             Students
           </Link>
         )}
 
         {canTeachers && (
-          <Link
-            href="/staff"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isPathActive("/staff")
-                ? "bg-primary text-white"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
+          <Link href="/staff" className={linkClass(isPathActive("/staff"))}>
             <Users className="w-4 h-4" />
             Staff
           </Link>
         )}
 
         {canAttendance && !isStaff && (
-          <Link
-            href="/attendance"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isPathActive("/attendance")
-                ? "bg-primary text-white"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
+          <Link href="/attendance" className={linkClass(isPathActive("/attendance"))}>
             <Calendar className="w-4 h-4" />
             Attendance
           </Link>
         )}
 
-        {canUsers && (
-          <Link
-            href="/users"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isPathActive("/users")
-                ? "bg-primary text-white"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            User Management
-          </Link>
-        )}
-
-        {canConfig && (
-          <Link
-            href="/configuration"
-            className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              isPathActive("/configuration")
-                ? "bg-primary text-white"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
-            <Settings className="w-4 h-4" />
-            Configuration
-          </Link>
-        )}
-
-        {/* Student-specific menu items */}
         {isStudent && (
           <>
-            <Link
-              href="/student/results"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/student/results")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/student/results" className={linkClass(isPathActive("/student/results"))}>
               <Award className="w-4 h-4" />
               My Results
             </Link>
-            <Link
-              href="/student/attendance"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/student/attendance")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/student/attendance" className={linkClass(isPathActive("/student/attendance"))}>
               <Calendar className="w-4 h-4" />
               My Attendance
             </Link>
-            <Link
-              href="/student/fees"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/student/fees")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/student/fees" className={linkClass(isPathActive("/student/fees"))}>
               <Banknote className="w-4 h-4" />
               Fee Status
             </Link>
           </>
         )}
 
-        {/* Parent-specific menu items */}
         {isParent && (
           <>
-            <Link
-              href="/portal/parent"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/portal/parent")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/portal/parent" className={linkClass(isPathActive("/portal/parent"))}>
               <Users className="w-4 h-4" />
               My Children
             </Link>
-            <Link
-              href="/parent/fees"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/parent/fees")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/parent/fees" className={linkClass(isPathActive("/parent/fees"))}>
               <Banknote className="w-4 h-4" />
               Fee Payments
             </Link>
           </>
         )}
 
-        {/* Staff-specific menu items */}
         {isStaff && (
           <>
-            <Link
-              href="/staff/attendance"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/staff/attendance")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/staff/attendance" className={linkClass(isPathActive("/staff/attendance"))}>
               <Calendar className="w-4 h-4" />
               My Attendance
             </Link>
-            <Link
-              href="/staff/leave"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/staff/leave")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
+            <Link href="/staff/leave" className={linkClass(isPathActive("/staff/leave"))}>
               <FileText className="w-4 h-4" />
               Leave Application
             </Link>
@@ -303,10 +183,10 @@ export default function Sidebar({ user }: SidebarProps) {
           <div>
             <button
               onClick={() => setIsFinanceExpanded(!isFinanceExpanded)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                 isPathActive("/finance")
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               }`}
             >
               <Banknote className="w-4 h-4" />
@@ -319,58 +199,23 @@ export default function Sidebar({ user }: SidebarProps) {
             </button>
 
             {isFinanceExpanded && (
-              <div className="mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 space-y-1">
-                <Link
-                  href="/finance/invoices"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/finance/invoices")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+              <div className="mt-1 ml-4 space-y-1 border-l border-border pl-3">
+                <Link href="/finance/invoices" className={subLinkClass(isActive("/finance/invoices"))}>
                   <FileText className="w-3.5 h-3.5" /> Invoices
                 </Link>
-                <Link
-                  href="/finance/collect"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/finance/collect")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/finance/collect" className={subLinkClass(isActive("/finance/collect"))}>
                   <CreditCard className="w-3.5 h-3.5" /> Collect Fees
                 </Link>
-                <Link
-                  href="/finance/discounts"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/finance/discounts")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/finance/discounts" className={subLinkClass(isActive("/finance/discounts"))}>
                   <Banknote className="w-3.5 h-3.5" /> Discounts
                 </Link>
-                <Link
-                  href="/finance/config"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/finance/config")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/finance/config" className={subLinkClass(isActive("/finance/config"))}>
                   <Settings className="w-3.5 h-3.5" /> Configuration
                 </Link>
-                <Link href="/parents"  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/parents")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}>
-                <Users className="w-4 h-4" />
-                    Parents Module
+                <Link href="/parents" className={subLinkClass(isActive("/parents"))}>
+                  <Users className="w-3.5 h-3.5" /> Parents Module
                 </Link>
-                
               </div>
-              
             )}
           </div>
         )}
@@ -380,10 +225,10 @@ export default function Sidebar({ user }: SidebarProps) {
           <div>
             <button
               onClick={() => setIsExamsExpanded(!isExamsExpanded)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                 isPathActive("/exams")
-                  ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               }`}
             >
               <BookOpen className="w-4 h-4" />
@@ -396,57 +241,22 @@ export default function Sidebar({ user }: SidebarProps) {
             </button>
 
             {isExamsExpanded && (
-              <div className="mt-1 ml-4 pl-3 border-l border-slate-200 dark:border-slate-700 space-y-1">
-                <Link
-                  href="/exams/marks-entry"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/exams/marks-entry")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+              <div className="mt-1 ml-4 space-y-1 border-l border-border pl-3">
+                <Link href="/exams/marks-entry" className={subLinkClass(isActive("/exams/marks-entry"))}>
                   <FileSpreadsheet className="w-3.5 h-3.5" /> Marks Entry
                 </Link>
-                <Link
-                  href="/exams/grading-systems"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/exams/grading-systems")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/exams/grading-systems" className={subLinkClass(isActive("/exams/grading-systems"))}>
                   <Award className="w-3.5 h-3.5" /> Grading Rules
                 </Link>
                 {can(user, "EXAMS", "CREATE") && (
-                  <Link
-                    href="/exams/new"
-                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive("/exams/new")
-                        ? "text-primary font-medium bg-primary/5"
-                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                    }`}
-                  >
+                  <Link href="/exams/new" className={subLinkClass(isActive("/exams/new"))}>
                     <Plus className="w-3.5 h-3.5" /> Create Exam
                   </Link>
                 )}
-                <Link
-                  href="/exams/configure"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/exams/configure")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/exams/configure" className={subLinkClass(isActive("/exams/configure"))}>
                   <ClipboardCheck className="w-3.5 h-3.5" /> Exam Setup
                 </Link>
-                <Link
-                  href="/exams/results/report-card"
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                    isActive("/exams/results/report-card")
-                      ? "text-primary font-medium bg-primary/5"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                  }`}
-                >
+                <Link href="/exams/results/report-card" className={subLinkClass(isActive("/exams/results/report-card"))}>
                   <FileBarChart className="w-3.5 h-3.5" /> Report Cards
                 </Link>
               </div>
@@ -454,200 +264,43 @@ export default function Sidebar({ user }: SidebarProps) {
           </div>
         )}
 
-        {/* --- Configuration / Hierarchy Tree --- */}
-        {canConfig && (
+        {/* --- Administration --- */}
+        {(canUsers || canConfig) && (
           <div className="pt-4">
-            <div className="px-3 pb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Organization
+            <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+              Administration
             </div>
-
-            <Link
-              href="/configuration"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isPathActive("/configuration")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              Master Setup
-            </Link>
-            <Link
-              href="/subject-groups"
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive("/subject-groups")
-                  ? "bg-primary text-white"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              Subject Groups
-            </Link>
-
-            {/* --- Dynamic Tree: School -> Campus -> Group -> Class --- */}
-            <div className="mt-2 space-y-2">
-              {schools.map((school: any) => {
-                const isSchoolExpanded = expandedSchools.has(school.id);
-                return (
-                  <div key={school.id}>
-                    {/* School Node */}
-                    <div className="flex items-center gap-1 group">
-                      <button
-                        onClick={() =>
-                          toggle(school.id, expandedSchools, setExpandedSchools)
-                        }
-                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400"
-                      >
-                        {isSchoolExpanded ? (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                      <Link
-                        href={`/schools/${school.id}/campuses`}
-                        className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                      >
-                        <School className="w-3.5 h-3.5 text-blue-500" />
-                        <span className="truncate font-medium">
-                          {school.name}
-                        </span>
-                      </Link>
-                    </div>
-
-                    {/* Campus List */}
-                    {isSchoolExpanded && (
-                      <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
-                        {school.campuses?.map((campus: any) => {
-                          const isCampusExpanded = expandedCampuses.has(
-                            campus.id
-                          );
-                          return (
-                            <div key={campus.id}>
-                              <div className="flex items-center gap-1 group">
-                                <button
-                                  onClick={() =>
-                                    toggle(
-                                      campus.id,
-                                      expandedCampuses,
-                                      setExpandedCampuses
-                                    )
-                                  }
-                                  className={`p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 ${
-                                    !campus.classGroups?.length
-                                      ? "opacity-30 pointer-events-none"
-                                      : ""
-                                  }`}
-                                >
-                                  {isCampusExpanded ? (
-                                    <ChevronDown className="w-3.5 h-3.5" />
-                                  ) : (
-                                    <ChevronRight className="w-3.5 h-3.5" />
-                                  )}
-                                </button>
-                                <Link
-                                  href={`/schools/${school.id}/campuses/${campus.id}`}
-                                  className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                >
-                                  <Building2 className="w-3.5 h-3.5 text-green-500" />
-                                  <span className="truncate">
-                                    {campus.name}
-                                  </span>
-                                </Link>
-                              </div>
-
-                              {/* Class Groups List */}
-                              {isCampusExpanded && (
-                                <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-1">
-                                  {campus.classGroups?.map((group: any) => {
-                                    const isGroupExpanded = expandedGroups.has(
-                                      group.id
-                                    );
-                                    return (
-                                      <div key={group.id}>
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() =>
-                                              toggle(
-                                                group.id,
-                                                expandedGroups,
-                                                setExpandedGroups
-                                              )
-                                            }
-                                            className={`p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded text-slate-400 ${
-                                              !group.classes?.length
-                                                ? "opacity-30 pointer-events-none"
-                                                : ""
-                                            }`}
-                                          >
-                                            {isGroupExpanded ? (
-                                              <ChevronDown className="w-3.5 h-3.5" />
-                                            ) : (
-                                              <ChevronRight className="w-3.5 h-3.5" />
-                                            )}
-                                          </button>
-                                          <Link
-                                            href={`/class-groups/${group.id}`}
-                                            className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                          >
-                                            <Layers className="w-3.5 h-3.5 text-orange-400" />
-                                            <span className="truncate">
-                                              {group.name}
-                                            </span>
-                                          </Link>
-                                        </div>
-
-                                        {/* Classes List */}
-                                        {isGroupExpanded && (
-                                          <div className="ml-2 pl-3 border-l border-slate-200 dark:border-slate-700 mt-1 space-y-0.5">
-                                            {group.classes?.map((cls: any) => (
-                                              <Link
-                                                key={cls.id}
-                                                href={`/classes/${cls.id}`}
-                                                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] transition-colors ${
-                                                  isActive(`/classes/${cls.id}`)
-                                                    ? "text-primary font-medium bg-primary/5"
-                                                    : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                                                }`}
-                                              >
-                                                <BookOpen className="w-3 h-3 text-indigo-400 opacity-70" />
-                                                <span className="truncate">
-                                                  {cls.name}
-                                                </span>
-                                              </Link>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {canUsers && (
+              <Link href="/users" className={linkClass(isPathActive("/users"))}>
+                <Shield className="w-4 h-4" />
+                User Management
+              </Link>
+            )}
+            {canConfig && (
+              <Link
+                href="/configuration"
+                className={linkClass(isPathActive("/configuration") || isPathActive("/subject-groups"))}
+              >
+                <Settings className="w-4 h-4" />
+                Configuration
+              </Link>
+            )}
           </div>
         )}
       </nav>
 
       {/* 3. Footer / Profile */}
-      <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="border-t border-sidebar-border bg-muted/40 p-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-sm font-bold text-white shadow-sm ring-2 ring-white dark:ring-slate-800">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground shadow-sm ring-2 ring-card">
             {user.name?.charAt(0).toUpperCase() || "U"}
           </div>
           <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-medium truncate text-slate-700 dark:text-slate-200">
+            <p className="truncate text-sm font-medium text-foreground">
               {user.name || "User"}
             </p>
             <p
-              className="text-xs text-slate-500 truncate"
+              className="truncate text-xs text-muted-foreground"
               title={user.email || ""}
             >
               {user.email || "No Email"}
@@ -655,15 +308,16 @@ export default function Sidebar({ user }: SidebarProps) {
           </div>
           <button
             onClick={handleLogout}
-            className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-md transition-colors"
+            className="cursor-pointer rounded-xl p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             title="Sign Out"
+            type="button"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>
-      <div className="text-center text-xs text-slate-500 dark:text-slate-400 py-2 border-t border-slate-200 dark:border-slate-800">
-        Developed By Moiz Hassan
+      <div className="border-t border-sidebar-border py-2 text-center text-xs text-muted-foreground">
+        Developed By Switch2itech
       </div>
     </aside>
   );

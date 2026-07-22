@@ -8,9 +8,10 @@ interface ChallanProps {
     student: any;
     schoolName: string;
     schoolAddress?: string;
+    schoolLogo?: string;
 }
 
-const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { title: string } & ChallanProps) => {
+const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress, schoolLogo }: { title: string } & ChallanProps) => {
     const billingDate = format(new Date(invoice.year, invoice.month - 1), 'MMMM yyyy');
     const total = Number(invoice.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     const items = Array.isArray(invoice.items) ? invoice.items : [];
@@ -91,7 +92,7 @@ const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { t
             </table>
 
             <img
-                src="/logo/logo.png"
+                src={schoolLogo || "/logo/logo.png"}
                 alt=""
                 aria-hidden="true"
                 className="absolute inset-0 m-auto mt-40 h-60 w-60 object-contain opacity-[0.5] pointer-events-none"
@@ -122,15 +123,15 @@ const ChallanCopy = ({ title, invoice, student, schoolName, schoolAddress }: { t
     );
 };
 
-export default function PrintableChallan({ invoice, student, schoolName, schoolAddress }: ChallanProps) {
+export default function PrintableChallan({ invoice, student, schoolName, schoolAddress, schoolLogo }: ChallanProps) {
     if (!invoice || !student) return null;
 
     return (
         <div className="challan-sheet w-full bg-white">
             <div className="challan-sheet-grid grid h-full grid-cols-3 gap-[2px]">
-                <ChallanCopy title="Bank" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
-                <ChallanCopy title="School" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
-                <ChallanCopy title="Student" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} />
+                <ChallanCopy title="Bank" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} schoolLogo={schoolLogo} />
+                <ChallanCopy title="School" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} schoolLogo={schoolLogo} />
+                <ChallanCopy title="Student" invoice={invoice} student={student} schoolName={schoolName} schoolAddress={schoolAddress} schoolLogo={schoolLogo} />
             </div>
         </div>
     );

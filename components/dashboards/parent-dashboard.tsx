@@ -2,13 +2,11 @@
 
 import { 
     Users,
-    BookOpen,
     CalendarCheck,
     Wallet,
     Award,
     TrendingUp
 } from 'lucide-react';
-import Link from 'next/link';
 
 interface ParentDashboardProps {
   data: any;
@@ -17,170 +15,126 @@ interface ParentDashboardProps {
 export default function ParentDashboard({ data }: ParentDashboardProps) {
   const { stats = {}, children = [] } = data || {};
 
-  // Provide default values for all stats
   const safeStats = {
     totalChildren: stats.totalChildren ?? 0,
     totalDues: stats.totalDues ?? 0,
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg p-6 text-white">
-        <h2 className="text-2xl font-bold mb-2">Parent Portal</h2>
-        <p className="text-purple-100">Managing {safeStats.totalChildren} {safeStats.totalChildren === 1 ? 'child' : 'children'}</p>
-      </div>
-
-      {/* KPI Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-        {/* Total Children */}
-        <div className="bg-white dark:bg-[#1a2632] p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary">
-              <Users className="h-6 w-6" />
-            </div>
-            <span className="text-slate-500 text-xs font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Total</span>
+    <div className="page-content space-y-5">
+      <div className="bento-grid">
+        <div className="bento-tile bento-tile-featured bento-span-2 flex flex-col justify-between p-5 sm:p-6">
+          <p className="text-sm text-teal-100">Parent portal</p>
+          <div>
+            <h2 className="font-heading text-2xl font-bold text-white sm:text-3xl">Your children</h2>
+            <p className="mt-2 text-sm text-teal-100">
+              Managing {safeStats.totalChildren} {safeStats.totalChildren === 1 ? 'child' : 'children'}
+            </p>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">My Children</p>
-          <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{safeStats.totalChildren}</h3>
         </div>
 
-        {/* Total Dues */}
-        <Link href="#" className="bg-white dark:bg-[#1a2632] p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-600">
-              <Wallet className="h-6 w-6" />
-            </div>
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              safeStats.totalDues > 0 
-                ? 'text-red-600 bg-red-50 dark:bg-red-900/20' 
-                : 'text-green-600 bg-green-50 dark:bg-green-900/20'
-            }`}>
-              {safeStats.totalDues > 0 ? 'Pending' : 'Paid'}
-            </span>
+        <div className="bento-tile flex flex-col justify-between p-5">
+          <div className="rounded-xl bg-secondary p-2.5 text-primary w-fit">
+            <Users className="h-5 w-5" />
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Fee Dues</p>
-          <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-            {safeStats.totalDues > 0 ? `Rs. ${safeStats.totalDues.toLocaleString()}` : 'All Clear'}
-          </h3>
-        </Link>
-      </div>
+          <div>
+            <p className="text-sm text-muted-foreground">My Children</p>
+            <h3 className="mt-1 font-heading text-3xl font-bold text-foreground">{safeStats.totalChildren}</h3>
+          </div>
+        </div>
 
-      {/* Children Details */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white">Children Overview</h3>
+        <div className="bento-tile flex flex-col justify-between p-5">
+          <div className="rounded-xl bg-accent p-2.5 text-cta w-fit">
+            <Wallet className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Total Fee Dues</p>
+            <h3 className="mt-1 font-heading text-2xl font-bold text-foreground">
+              {safeStats.totalDues > 0 ? `Rs. ${safeStats.totalDues.toLocaleString()}` : 'All Clear'}
+            </h3>
+          </div>
         </div>
 
         {children && children.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {children.map((child: any) => (
-              <div key={child.id} className="bg-white dark:bg-[#1a2632] rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
-                {/* Child Header */}
-                <div className="p-5 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                      {child.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white text-lg">{child.name}</h4>
-                      <p className="text-sm text-slate-500">
-                        {child.className} - {child.sectionName} | Roll: {child.rollNumber}
-                      </p>
-                    </div>
-                  </div>
+          children.map((child: any) => (
+            <div key={child.id} className="bento-tile bento-span-2 flex flex-col p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary font-heading text-lg font-bold text-primary-foreground">
+                  {child.name.charAt(0).toUpperCase()}
                 </div>
-
-                {/* Child Stats */}
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    {/* Attendance */}
-                    <div className="text-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <CalendarCheck className={`h-6 w-6 mx-auto mb-2 ${
-                        child.attendancePercentage >= 75 ? 'text-green-600' : 'text-red-600'
-                      }`} />
-                      <p className="text-xs text-slate-500 mb-1">Attendance</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-white">{child.attendancePercentage}%</p>
-                    </div>
-
-                    {/* Pending Fees */}
-                    <div className="text-center p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <Wallet className={`h-6 w-6 mx-auto mb-2 ${
-                        (child.pendingFees ?? 0) > 0 ? 'text-orange-600' : 'text-green-600'
-                      }`} />
-                      <p className="text-xs text-slate-500 mb-1">Pending Fees</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-white">
-                        {(child.pendingFees ?? 0) > 0 ? `Rs. ${(child.pendingFees ?? 0).toLocaleString()}` : 'Paid'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Recent Results */}
-                  {child.recentResults && child.recentResults.length > 0 && (
-                    <div className="mt-4">
-                      <h5 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
-                        <Award className="h-4 w-4" />
-                        Recent Results
-                      </h5>
-                      <div className="space-y-2">
-                        {child.recentResults.map((result: any, index: number) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded">
-                            <span className="text-sm text-slate-600 dark:text-slate-400">{result.examName}</span>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-sm font-semibold ${
-                                result.percentage >= 80 ? 'text-green-600' :
-                                result.percentage >= 60 ? 'text-blue-600' :
-                                result.percentage >= 40 ? 'text-orange-600' :
-                                'text-red-600'
-                              }`}>
-                                {result.grade || `${result.percentage}%`}
-                              </span>
-                              <TrendingUp className="h-3 w-3 text-slate-400" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Button */}
-                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <button className="w-full py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium">
-                      View Detailed Report
-                    </button>
-                  </div>
+                <div>
+                  <h4 className="font-heading text-lg font-semibold text-foreground">{child.name}</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {child.className} - {child.sectionName} | Roll: {child.rollNumber}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/50 p-3 text-center">
+                  <CalendarCheck className={`mx-auto mb-2 h-5 w-5 ${
+                    child.attendancePercentage >= 75 ? 'text-emerald-600' : 'text-destructive'
+                  }`} />
+                  <p className="text-xs text-muted-foreground">Attendance</p>
+                  <p className="font-heading text-lg font-bold text-foreground">{child.attendancePercentage}%</p>
+                </div>
+                <div className="rounded-xl bg-muted/50 p-3 text-center">
+                  <Wallet className={`mx-auto mb-2 h-5 w-5 ${
+                    (child.pendingFees ?? 0) > 0 ? 'text-cta' : 'text-emerald-600'
+                  }`} />
+                  <p className="text-xs text-muted-foreground">Pending Fees</p>
+                  <p className="font-heading text-lg font-bold text-foreground">
+                    {(child.pendingFees ?? 0) > 0 ? `Rs. ${(child.pendingFees ?? 0).toLocaleString()}` : 'Paid'}
+                  </p>
+                </div>
+              </div>
+
+              {child.recentResults && child.recentResults.length > 0 && (
+                <div>
+                  <h5 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Award className="h-4 w-4" />
+                    Recent Results
+                  </h5>
+                  <div className="space-y-2">
+                    {child.recentResults.map((result: any, index: number) => (
+                      <div key={index} className="flex items-center justify-between rounded-lg bg-muted/40 p-2">
+                        <span className="text-sm text-muted-foreground">{result.examName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground">
+                            {result.grade || `${result.percentage}%`}
+                          </span>
+                          <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
         ) : (
-          <div className="bg-white dark:bg-[#1a2632] rounded-lg border border-slate-200 dark:border-slate-800 p-12 text-center">
-            <Users className="h-16 w-16 mx-auto mb-4 text-slate-300 dark:text-slate-700" />
-            <p className="text-slate-500">No children records found</p>
+          <div className="bento-tile col-span-1 p-12 text-center sm:col-span-2 lg:col-span-4">
+            <Users className="mx-auto mb-4 h-14 w-14 text-muted-foreground/40" />
+            <p className="text-muted-foreground">No children records found</p>
+          </div>
+        )}
+
+        {safeStats.totalDues > 0 && (
+          <div className="bento-tile col-span-1 border-cta/30 bg-accent/50 p-5 sm:col-span-2 lg:col-span-4">
+            <div className="flex items-start gap-4">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-accent text-cta">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-foreground">Payment reminder</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pending fee payments total Rs. {safeStats.totalDues.toLocaleString()}. Clear dues at your earliest convenience.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Quick Actions */}
-      {safeStats.totalDues > 0 && (
-        <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 flex-shrink-0">
-              <Wallet className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-slate-900 dark:text-white mb-1">Payment Reminder</h4>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-                You have pending fee payments totaling Rs. {safeStats.totalDues.toLocaleString()}. Please clear your dues at your earliest convenience.
-              </p>
-              <button className="text-sm font-medium text-orange-600 hover:text-orange-700 underline">
-                View Payment Details →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-

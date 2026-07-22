@@ -1,4 +1,7 @@
-import { GraduationCap } from "lucide-react";
+'use client';
+
+import Image from "next/image";
+import { useSchoolBrand } from "@/contexts/SchoolBrandContext";
 
 interface ReportCardProps {
     student: any;
@@ -7,14 +10,23 @@ interface ReportCardProps {
 }
 
 export default function PrintableReportCard({ student, examName, className }: ReportCardProps) {
+    const { brand } = useSchoolBrand();
+
     return (
         <div className="p-8 bg-white text-black print:p-0" id="report-card">
             {/* Header */}
             <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
-                <div className="flex justify-center mb-2">
-                    <GraduationCap className="h-12 w-12" />
+                <div className="mb-2 flex justify-center">
+                    <Image
+                        src={brand.logoPath || "/logo/logo.png"}
+                        alt={brand.name}
+                        width={48}
+                        height={48}
+                        className="h-12 w-12 object-contain"
+                        unoptimized={brand.logoPath?.startsWith("/uploads/")}
+                    />
                 </div>
-                <h1 className="text-3xl font-bold uppercase tracking-widest">Moiz School System</h1>
+                <h1 className="text-3xl font-bold uppercase tracking-widest">{brand.name}</h1>
                 <p className="text-sm text-gray-600">Excellence in Education</p>
                 <div className="mt-4 bg-gray-900 text-white py-1 w-full max-w-xs mx-auto rounded-full">
                     <h2 className="text-lg font-semibold">{examName} Result Card</h2>

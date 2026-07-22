@@ -42,3 +42,4 @@ next-env.d.ts
 
 .agents
 /lib/generated/prisma
+/public/uploads

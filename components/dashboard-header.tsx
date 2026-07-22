@@ -1,6 +1,7 @@
 'use client';
 
 import { Search, Bell, MessageSquare } from 'lucide-react';
+import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
 
 interface DashboardHeaderProps {
   user: {
@@ -11,6 +12,7 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({ user }: DashboardHeaderProps) {
+  const { brand } = useSchoolBrand();
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -26,46 +28,56 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
   };
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 bg-white dark:bg-[#1a2632] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+    <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border/80 bg-card/90 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
       <div className="flex items-center gap-4">
-        <h2 className="text-xl font-bold tracking-tight hidden sm:block text-slate-900 dark:text-white">
-          Dashboard Overview
-        </h2>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {brand.name}
+          </p>
+          <h2 className="font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+            Dashboard Overview
+          </h2>
+        </div>
       </div>
       
-      <div className="flex items-center gap-4 sm:gap-6">
-        {/* Search */}
+      <div className="flex items-center gap-3 sm:gap-5">
         <div className="relative hidden sm:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input 
-            className="w-64 pl-10 pr-4 py-2 bg-[#f6f7f8] dark:bg-[#101922] border-none rounded-lg text-sm text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-primary/50 placeholder:text-slate-400 outline-none transition-all" 
+            className="w-64 rounded-xl border border-border/80 bg-muted/60 py-2 pl-10 pr-4 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary/40 focus:ring-2 focus:ring-primary/20" 
             placeholder="Search students, staff..." 
             type="text"
           />
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="relative cursor-pointer rounded-xl p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Notifications"
+          >
             <Bell className="h-5 w-5" />
-            <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-[#1a2632]"></span>
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-card bg-destructive" />
           </button>
-          <button className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
+          <button
+            type="button"
+            className="cursor-pointer rounded-xl p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Messages"
+          >
             <MessageSquare className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Profile */}
-        <div className="flex items-center gap-3 pl-2 border-l border-slate-200 dark:border-slate-700">
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-semibold leading-none text-slate-900 dark:text-white">
+        <div className="flex items-center gap-3 border-l border-border/80 pl-3 sm:pl-4">
+          <div className="hidden text-right md:block">
+            <p className="text-sm font-semibold leading-none text-foreground">
               {user.name}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            <p className="mt-1 text-xs capitalize text-muted-foreground">
               {getRoleDisplay(user.role)}
             </p>
           </div>
-          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold border-2 border-white dark:border-slate-700 shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-card bg-primary/15 font-heading text-sm font-bold text-primary shadow-sm">
             {getInitials(user.name)}
           </div>
         </div>
@@ -73,4 +85,3 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
     </header>
   );
 }
-

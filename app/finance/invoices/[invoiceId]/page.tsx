@@ -10,10 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import PrintableChallan from '@/components/finance/printable-challan';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ invoiceId: string }>();
   const { schools } = useSidebar();
+  const { brand } = useSchoolBrand();
   const [invoice, setInvoice] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -95,8 +97,9 @@ export default function InvoiceDetailPage() {
         <PrintableChallan
           invoice={invoice}
           student={invoice.student}
-          schoolName={schoolInfo?.name || 'Harvard School Sargodha'}
-          schoolAddress={(schoolInfo as any)?.address}
+          schoolName={schoolInfo?.name || brand.name}
+          schoolAddress={(schoolInfo as any)?.address || brand.address || undefined}
+          schoolLogo={(schoolInfo as any)?.logoPath || brand.logoPath}
         />
       </div>
     </div>

@@ -77,9 +77,9 @@ export default function SubjectGroupDetailPage() {
         <div className="container max-w-6xl mx-auto py-10 px-4 space-y-8">
             {/* Header */}
             <div className="flex flex-col gap-2">
-                <Link href="/subject-groups">
+                <Link href="/configuration?tab=subject-groups">
                     <Button variant="ghost" size="sm" className="pl-0 text-muted-foreground hover:text-foreground">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Groups
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Configuration
                     </Button>
                 </Link>
                 <div className="flex justify-between items-center">

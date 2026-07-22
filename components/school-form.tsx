@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
 
 const schoolSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -16,6 +17,7 @@ const schoolSchema = z.object({
 
 export default function SchoolForm() {
     const router = useRouter();
+    const { refreshBrand } = useSchoolBrand();
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export default function SchoolForm() {
                 throw new Error('Failed to create school');
             }
 
+            await refreshBrand();
             router.push('/');
             router.refresh();
         } catch (error) {

@@ -19,13 +19,12 @@ export default function LayoutWrapper({
     return <>{children}</>;
   }
 
-  // Prefer live session so sidebar role/menus stay correct after auth changes
   const activeUser = session?.user ?? user;
 
   return (
-    <div className="flex">
+    <div className="flex min-h-screen">
       <Sidebar user={activeUser} />
-      <main className="flex-1">
+      <main className="page-shell min-w-0 bg-transparent">
         {children}
       </main>
     </div>

@@ -71,39 +71,39 @@ export default function StudentsPage() {
   }, [search]);
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="page-content mx-auto w-full max-w-[1400px] space-y-6">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground">
             Student Directory
           </h1>
-          <p className="text-slate-500 dark:text-gray-400 text-base font-normal">
+          <p className="text-base text-muted-foreground">
             Search by student ID, name, father name, or roll number.
           </p>
         </div>
         <div className="flex gap-3">
           <Button
             variant="outline"
-            className="bg-white border-slate-200 text-slate-900 shadow-sm hover:bg-slate-50 gap-2 font-bold"
+            className="cursor-pointer gap-2 font-semibold"
           >
             <FileUp className="h-4 w-4" /> Import
           </Button>
           <Link href="/students/new">
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-md shadow-blue-500/20 font-bold gap-2">
+            <Button className="cursor-pointer gap-2 font-semibold shadow-md shadow-primary/20">
               <Plus className="h-4 w-4" /> Add New Student
             </Button>
           </Link>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+      <div className="bento-tile p-4">
         <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
             <Search className="h-5 w-5" />
           </div>
           <Input
             placeholder="Search by ID, Name, Father name, or Roll number..."
-            className="pl-10 h-12 bg-[#f6f7f8] border-transparent focus:bg-white transition-all text-base"
+            className="h-12 border-transparent bg-muted/60 pl-10 text-base transition-all focus:border-primary/30 focus:bg-card"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
@@ -111,15 +111,15 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bento-tile overflow-hidden">
         {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            <p className="mt-2 text-sm text-slate-500">Searching...</p>
+          <div className="py-20 text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+            <p className="mt-2 text-sm text-muted-foreground">Searching...</p>
           </div>
         ) : !hasSearched ? (
-          <div className="text-center py-20 text-slate-500 space-y-2">
-            <Search className="h-10 w-10 mx-auto text-slate-300" />
+          <div className="space-y-2 py-20 text-center text-muted-foreground">
+            <Search className="mx-auto h-10 w-10 text-muted-foreground/40" />
             <p className="font-medium text-slate-700">Find a student</p>
             <p className="text-sm">
               Type at least 2 characters — ID, name, father name, or roll number.

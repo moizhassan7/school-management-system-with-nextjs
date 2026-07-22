@@ -5,12 +5,14 @@ import crypto from 'crypto';
 import { Role } from '@prisma/client';
 import { auth } from '@/auth';
 import { can, permissionKey } from '@/lib/permissions';
+import { generateAdmissionNumber } from '@/lib/admission-number';
 
 const studentSchema = z.object({
+  // Ignored when creating — server always auto-generates
   admissionNumber: z.string().optional(),
   rollNumber: z.string().optional(),
   admissionDate: z.string(),
-  classId: z.string().optional(),
+  classId: z.string().min(1, 'Class is required'),
   sectionId: z.string().optional(),
   subjectGroupId: z.string().optional(),
   academicYearId: z.string().optional(),
@@ -37,6 +39,7 @@ const userSchema = z.object({
   password: z.string().min(6),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
+  religion: z.string().optional().or(z.literal('')),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']).optional(),
   schoolId: z.string().optional().or(z.literal('')),
   role: z.nativeEnum(Role).optional(),
@@ -136,6 +139,7 @@ export async function POST(request: Request) {
           passwordHash,
           phone: data.phone || null,
           address: data.address || null,
+          religion: data.religion || null,
           gender: data.gender ?? 'UNSPECIFIED',
           schoolId: effectiveSchoolId,
           role,
@@ -174,7 +178,15 @@ export async function POST(request: Request) {
       let studentRecord = null;
       if (data.student) {
         const s = data.student;
+        if (!s.classId) {
+          throw new Error('CLASS_REQUIRED');
+        }
+
         let academicYearId = s.academicYearId;
+        const startYear =
+          s.academicYear?.startYear ||
+          String(new Date(s.admissionDate).getFullYear());
+
         if (!academicYearId && s.academicYear) {
           const existing = await tx.academicYear.findFirst({
             where: {
@@ -197,14 +209,21 @@ export async function POST(request: Request) {
           }
         }
 
+        const admissionNumber = await generateAdmissionNumber(
+          tx,
+          effectiveSchoolId,
+          s.classId,
+          startYear
+        );
+
         studentRecord = await tx.studentRecord.create({
           data: {
             userId: created.id,
-            admissionNumber: s.admissionNumber || null,
+            admissionNumber,
             rollNumber: s.rollNumber || null,
             subjectGroupId: s.subjectGroupId || null,
             admissionDate: new Date(s.admissionDate),
-            classId: s.classId || null,
+            classId: s.classId,
             sectionId: s.sectionId || null,
           },
         });
@@ -246,6 +265,18 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'CLASS_REQUIRED') {
+      return NextResponse.json(
+        { error: 'Class is required to create a student' },
+        { status: 400 }
+      );
+    }
+    if (
+      error instanceof Error &&
+      error.message === 'Class is required to generate admission number'
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof z.ZodError) {
       return NextResponse.json({ errors: error.issues }, { status: 400 });
     }

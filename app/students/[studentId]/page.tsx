@@ -101,8 +101,8 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                 </Link>
                 <h1 className="text-2xl font-bold text-slate-900">Student Profile</h1>
                 <div className="ml-auto flex gap-2">
-                    <Link href={`/users/${student.id}/edit`}>
-                         <Button variant="outline"><Edit className="mr-2 h-4 w-4"/> Edit Profile</Button>
+                    <Link href={`/students/${student.id}/edit`}>
+                         <Button variant="outline" className="cursor-pointer"><Edit className="mr-2 h-4 w-4"/> Edit Profile</Button>
                     </Link>
                 </div>
             </div>

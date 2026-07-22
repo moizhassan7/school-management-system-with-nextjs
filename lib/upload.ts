@@ -1,4 +1,4 @@
-import { writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 
@@ -57,6 +57,9 @@ export async function saveUploadedFile(file: File): Promise<UploadResult> {
                 error: `File size exceeds the maximum limit of ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
             };
         }
+
+        // Ensure upload directory exists
+        await mkdir(UPLOAD_DIR, { recursive: true });
 
         // Generate unique filename
         const filename = generateUniqueFilename(file.name);

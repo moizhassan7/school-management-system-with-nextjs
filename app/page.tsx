@@ -546,7 +546,7 @@ export default async function Dashboard() {
   const userEmail = session.user.email || '';
 
   return (
-    <div className="flex flex-col h-full bg-[#f6f7f8] dark:bg-[#101922]">
+    <div className="flex h-full min-h-screen flex-col bg-transparent">
       <DashboardHeader user={{ name: userName, email: userEmail, role }} />
 
       {/* Render role-specific dashboard */}

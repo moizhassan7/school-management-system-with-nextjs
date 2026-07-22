@@ -42,6 +42,7 @@ const studentFormSchema = z.object({
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']),
     phone: z.string().optional(),
     address: z.string().optional(),
+    religion: z.string().optional(),
     
     schoolId: z.string().min(1, 'School is required'),
     campusId: z.string().min(1, 'Campus is required'),
@@ -50,7 +51,7 @@ const studentFormSchema = z.object({
     sectionId: z.string().optional(),
     subjectGroupId: z.string().optional(),
     
-    admissionNumber: z.string().min(1, 'Admission number is required'),
+    admissionNumber: z.string().optional(),
     rollNumber: z.string().optional(),
     admissionDate: z.string().min(1, 'Admission date is required'),
     
@@ -125,7 +126,7 @@ export default function StudentForm() {
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
         defaultValues: {
-            name: '', email: '', password: '', gender: 'MALE', phone: '', address: '',
+            name: '', email: '', password: '', gender: 'MALE', phone: '', address: '', religion: '',
             schoolId: '', campusId: '', classGroupId: '', classId: '', sectionId: '', subjectGroupId: '',
             admissionNumber: '', rollNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
             startYear: new Date().getFullYear().toString(),
@@ -298,9 +299,9 @@ export default function StudentForm() {
             // ... (Keep existing payload construction & API calls) ...
             const payload = {
                 name: data.name, email: data.email, password: data.password, schoolId: data.schoolId,
-                gender: data.gender, phone: data.phone, address: data.address,
+                gender: data.gender, phone: data.phone, address: data.address, religion: data.religion || undefined,
                 student: {
-                    admissionNumber: data.admissionNumber, rollNumber: data.rollNumber || undefined,
+                    rollNumber: data.rollNumber || undefined,
                     admissionDate: data.admissionDate, classId: data.classId,
                     sectionId: data.sectionId || undefined, subjectGroupId: data.subjectGroupId || undefined,
                     academicYear: { startYear: data.startYear, stopYear: data.stopYear },
@@ -344,6 +345,9 @@ export default function StudentForm() {
             }
             const studentUser = userResult;
             const studentRecordId = studentUser.studentRecord?.id;
+            const generatedAdmissionNo =
+                studentUser.studentRecord?.admissionNumber ||
+                `TMP-${Date.now()}`;
             let hasParentIssue = false;
 
             if (data.parentMode === 'LINK' && data.selectedParentId) {
@@ -374,7 +378,7 @@ export default function StudentForm() {
 
                 for (let i = 0; i < toCreate.length; i += 1) {
                     const parent = toCreate[i];
-                    const generatedEmail = `${data.admissionNumber}-${parent.relationship.toLowerCase()}-${Date.now()}-${i}@school.local`;
+                    const generatedEmail = `${generatedAdmissionNo}-${parent.relationship.toLowerCase()}-${Date.now()}-${i}@school.local`;
                     const response = await fetch('/api/parents', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -402,7 +406,7 @@ export default function StudentForm() {
             if (hasParentIssue) {
                 toast.warning('Student created, but one or more parent records could not be linked.');
             } else {
-                toast.success('Student admission created successfully');
+                toast.success(`Student admitted (${generatedAdmissionNo})`);
             }
         } catch (error) {
             console.error(error);
@@ -433,158 +437,16 @@ export default function StudentForm() {
 
             <Form {...form}>
                 <form className="flex flex-col gap-6">
-                    
-                    {/* 1. School & Placement Card */}
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center gap-3">
-                            <div className="text-primary bg-primary/10 p-1.5 rounded-lg">
-                                <Building2 className="h-5 w-5" />
-                            </div>
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">School & Class Placement</h3>
-                        </div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <FormField control={form.control} name="schoolId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">School Branch *</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="campusId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Campus Type</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSchool}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{availableCampuses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="classGroupId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Class Group</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedCampus}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{availableGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="classId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Class *</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableClasses.length === 0}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{availableClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="sectionId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Section</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableSections.length === 0}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{availableSections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="subjectGroupId" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Stream (Optional)</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableStreams.length === 0}>
-                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
-                                        <SelectContent>{availableStreams.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="admissionNumber" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Admission Number</FormLabel>
-                                    <FormControl><Input {...field} className="bg-white" placeholder="Auto-generated or Enter" /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <FormField control={form.control} name="rollNumber" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="text-slate-700">Roll Number</FormLabel>
-                                    <FormControl><Input {...field} className="bg-white" /></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )} />
-                            <div className="grid grid-cols-2 gap-4">
-                                <FormField control={form.control} name="startYear" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-slate-700">Session Start</FormLabel>
-                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
-                                    </FormItem>
-                                )} />
-                                <FormField control={form.control} name="stopYear" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="text-slate-700">Session End</FormLabel>
-                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
-                                    </FormItem>
-                                )} />
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Fee Structure Assignment</h3>
-                            <p className="text-sm text-slate-500 mt-1">Class default fee structure is loaded here and you can edit amounts for this student.</p>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            {!selectedClass ? (
-                                <p className="text-sm text-slate-500">Select a class to load fee structure.</p>
-                            ) : isLoadingFeeStructure ? (
-                                <div className="flex items-center gap-2 text-sm text-slate-500">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Loading fee structure...
-                                </div>
-                            ) : classFeeItems.length === 0 ? (
-                                <p className="text-sm text-amber-600">No fee structure configured for this class yet.</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-12 gap-2 text-xs font-bold uppercase text-slate-500 px-3">
-                                        <span className="col-span-8">Fee Head</span>
-                                        <span className="col-span-4 text-right">Amount</span>
-                                    </div>
-                                    {selectedFeeItems.map((item) => (
-                                        <div key={item.feeHeadId} className="grid grid-cols-12 items-center gap-2 border rounded-lg px-3 py-2 bg-slate-50/50">
-                                            <span className="col-span-8 text-sm font-medium text-slate-800">{item.feeHeadName}</span>
-                                            <div className="col-span-4 flex items-center gap-2">
-                                                <span className="text-sm text-slate-500">Rs.</span>
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    value={item.amount}
-                                                    onChange={(event) => updateFeeAmount(item.feeHeadId, event.target.value)}
-                                                    className="bg-white text-right"
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 2. Personal Details Card */}
+                    {/* 1. Student Details */}
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 flex items-center gap-3">
-                            <div className="text-purple-500 bg-purple-100 p-1.5 rounded-lg">
+                            <div className="text-primary bg-primary/10 p-1.5 rounded-lg">
                                 <User className="h-5 w-5" />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-900">Personal Details</h3>
+                            <h3 className="text-lg font-bold text-slate-900">Student Details</h3>
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-6 gap-6">
-                            {/* Photo Placeholder */}
                             <div className="md:col-span-1 flex flex-col items-center justify-center gap-3">
                                 <input
                                     ref={photoInputRef}
@@ -664,6 +526,27 @@ export default function StudentForm() {
                                     </FormItem>
                                 )} />
 
+                                <FormField control={form.control} name="religion" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Religion</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || undefined}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-white">
+                                                    <SelectValue placeholder="Select religion" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                <SelectItem value="Islam">Islam</SelectItem>
+                                                <SelectItem value="Christianity">Christianity</SelectItem>
+                                                <SelectItem value="Hinduism">Hinduism</SelectItem>
+                                                <SelectItem value="Sikhism">Sikhism</SelectItem>
+                                                <SelectItem value="Other">Other</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )} />
+
                                 <FormField control={form.control} name="address" render={({ field }) => (
                                     <FormItem className="md:col-span-2">
                                         <FormLabel className="text-slate-700">Residential Address</FormLabel>
@@ -683,7 +566,156 @@ export default function StudentForm() {
                         </div>
                     </div>
 
-                    {/* 3. Parent Information */}
+                    {/* 2. School & Class Placement */}
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center gap-3">
+                            <div className="text-primary bg-primary/10 p-1.5 rounded-lg">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">School & Class Placement</h3>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <FormField control={form.control} name="schoolId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">School Branch *</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{schools.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="campusId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Campus Type</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedSchool}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableCampuses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="classGroupId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Class Group</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedCampus}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="classId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Class *</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableClasses.length === 0}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableClasses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="sectionId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Section</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableSections.length === 0}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableSections.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="subjectGroupId" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Stream (Optional)</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={availableStreams.length === 0}>
+                                        <FormControl><SelectTrigger className="bg-white"><SelectValue placeholder="Select" /></SelectTrigger></FormControl>
+                                        <SelectContent>{availableStreams.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormItem>
+                                <FormLabel className="text-slate-700">Admission Number</FormLabel>
+                                <FormControl>
+                                    <Input
+                                        className="bg-muted/60"
+                                        value=""
+                                        disabled
+                                        placeholder="Auto: Year-Class-#### (e.g. 2026-09-0001)"
+                                        readOnly
+                                    />
+                                </FormControl>
+                                <p className="text-xs text-muted-foreground">
+                                    Server auto-generates from session year + class after you save.
+                                </p>
+                            </FormItem>
+                            <FormField control={form.control} name="rollNumber" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-slate-700">Roll Number</FormLabel>
+                                    <FormControl><Input {...field} className="bg-white" /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField control={form.control} name="startYear" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Session Start</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
+                                    </FormItem>
+                                )} />
+                                <FormField control={form.control} name="stopYear" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-slate-700">Session End</FormLabel>
+                                        <FormControl><Input {...field} className="bg-white" maxLength={4} /></FormControl>
+                                    </FormItem>
+                                )} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Fee Structure Assignment</h3>
+                            <p className="text-sm text-slate-500 mt-1">Class default fee structure is loaded here and you can edit amounts for this student.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {!selectedClass ? (
+                                <p className="text-sm text-slate-500">Select a class to load fee structure.</p>
+                            ) : isLoadingFeeStructure ? (
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading fee structure...
+                                </div>
+                            ) : classFeeItems.length === 0 ? (
+                                <p className="text-sm text-amber-600">No fee structure configured for this class yet.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-12 gap-2 text-xs font-bold uppercase text-slate-500 px-3">
+                                        <span className="col-span-8">Fee Head</span>
+                                        <span className="col-span-4 text-right">Amount</span>
+                                    </div>
+                                    {selectedFeeItems.map((item) => (
+                                        <div key={item.feeHeadId} className="grid grid-cols-12 items-center gap-2 border rounded-lg px-3 py-2 bg-slate-50/50">
+                                            <span className="col-span-8 text-sm font-medium text-slate-800">{item.feeHeadName}</span>
+                                            <div className="col-span-4 flex items-center gap-2">
+                                                <span className="text-sm text-slate-500">Rs.</span>
+                                                <Input
+                                                    type="number"
+                                                    min="0"
+                                                    value={item.amount}
+                                                    onChange={(event) => updateFeeAmount(item.feeHeadId, event.target.value)}
+                                                    className="bg-white text-right"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 3. Parent / Guardian Information */}
                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -709,7 +741,6 @@ export default function StudentForm() {
                         </div>
                         <div className="p-6">
                             
-                            {/* Search Box */}
                             {form.watch('parentMode') === 'LINK' && !selectedParent && (
                                 <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-4 items-center">
                                     <div className="flex-1 relative">
@@ -727,7 +758,6 @@ export default function StudentForm() {
                                 </div>
                             )}
 
-                            {/* Search Results */}
                             {searchResults.length > 0 && (
                                 <div className="mb-6 space-y-2">
                                     {searchResults.map((p) => (
@@ -742,7 +772,6 @@ export default function StudentForm() {
                                 </div>
                             )}
 
-                            {/* Selected Parent */}
                             {selectedParent && (
                                 <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex justify-between items-center">
                                     <div>
