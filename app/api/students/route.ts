@@ -6,12 +6,20 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim() || '';
+    const classGroupId = searchParams.get('classGroupId')?.trim() || '';
     const classId = searchParams.get('classId')?.trim() || '';
+    const sectionId = searchParams.get('sectionId')?.trim() || '';
 
     const studentRecordFilter: Prisma.StudentRecordWhereInput = {};
 
     if (classId) {
       studentRecordFilter.classId = classId;
+    } else if (classGroupId) {
+      studentRecordFilter.myClass = { classGroupId };
+    }
+
+    if (sectionId) {
+      studentRecordFilter.sectionId = sectionId;
     }
 
     if (q) {
@@ -34,6 +42,7 @@ export async function GET(request: Request) {
     }
 
     const hasRecordFilter = Object.keys(studentRecordFilter).length > 0;
+    const hasScopedFilter = !!(classGroupId || classId || sectionId || q);
 
     const students = await prisma.user.findMany({
       where: {
@@ -77,7 +86,7 @@ export async function GET(request: Request) {
       orderBy: {
         createdAt: 'desc',
       },
-      ...(q ? { take: 50 } : {}),
+      ...(hasScopedFilter ? { take: q && !classId && !sectionId ? 50 : 200 } : { take: 0 }),
     });
 
     return NextResponse.json(students);
