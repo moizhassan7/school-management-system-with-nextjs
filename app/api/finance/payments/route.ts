@@ -1,57 +1,51 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
+import { applyInvoicePayment, PaymentRejectedError } from '@/lib/payments';
+import { handleApiError } from '@/lib/api-error';
+
+const paymentSchema = z.object({
+  invoiceId: z.string().min(1),
+  amount: z.coerce.number().positive(),
+  method: z.enum(['CASH', 'BANK_TRANSFER', 'ONLINE', 'CHEQUE']).optional(),
+  transactionId: z.string().optional().nullable(),
+});
 
 export async function POST(request: Request) {
   try {
-    const { invoiceId, amount, method, transactionId } = await request.json();
+    const { session, error } = await requirePermission('FEES', 'CREATE');
+    if (error || !session) return error;
 
-    // 1. Get current invoice state
+    const body = paymentSchema.parse(await request.json());
+
     const invoice = await prisma.invoice.findUnique({
-        where: { id: invoiceId }
+      where: { id: body.invoiceId },
+      select: { id: true, schoolId: true },
     });
+    if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
-    if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    const denied = assertSameSchool(session, invoice.schoolId);
+    if (denied) return denied;
 
-    const newAmount = Number(amount);
-    const currentPaid = Number(invoice.paidAmount);
-    const total = Number(invoice.totalAmount);
-    
-    // Prevent overpayment
-    if (currentPaid + newAmount > total) {
-        return NextResponse.json({ error: "Amount exceeds pending balance" }, { status: 400 });
-    }
-
-    // 2. Database Transaction (Ensure data integrity)
     await prisma.$transaction(async (tx) => {
-        // A. Create Payment Record (History)
-        await tx.payment.create({
-            data: {
-                amount: newAmount,
-                method: method || 'CASH',
-                transactionId: transactionId || null,
-                invoiceId: invoiceId,
-                schoolId: invoice.schoolId,
-                date: new Date()
-            }
-        });
-
-        // B. Update Invoice Status
-        const updatedPaid = currentPaid + newAmount;
-        const newStatus = updatedPaid >= total ? 'PAID' : 'PARTIAL';
-
-        await tx.invoice.update({
-            where: { id: invoiceId },
-            data: {
-                paidAmount: updatedPaid,
-                status: newStatus
-            }
-        });
+      await applyInvoicePayment(tx, {
+        invoiceId: invoice.id,
+        amount: body.amount,
+        method: body.method || 'CASH',
+        transactionId: body.transactionId,
+        schoolId: invoice.schoolId,
+      });
     });
 
     return NextResponse.json({ success: true });
-
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Payment failed" }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid payment', issues: error.issues }, { status: 400 });
+    }
+    if (error instanceof PaymentRejectedError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return handleApiError(error, 'Payment failed');
   }
 }

@@ -165,6 +165,9 @@ export async function POST(request: Request) {
 
     } catch (error) {
         console.error("Generation Failed:", error);
+        if ((error as { code?: string })?.code === 'P2002') {
+            return NextResponse.json({ error: 'Invoices for this period already exist' }, { status: 409 });
+        }
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

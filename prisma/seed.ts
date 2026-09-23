@@ -1,12 +1,8 @@
 import { PrismaClient, Role } from '@prisma/client';
-import crypto from 'crypto';
 import { seedPermissionCatalog } from '../lib/permissions';
+import { hashPassword } from '../lib/password';
 
 const prisma = new PrismaClient();
-
-const hashPassword = (password: string) => {
-  return crypto.createHash('sha256').update(password).digest('hex');
-};
 
 async function grantCampusAccess(userId: string, campusIds: string[]) {
   for (const campusId of campusIds) {
@@ -49,7 +45,7 @@ async function main() {
   });
   console.log(`🏫 Campus: ${campus.name}`);
 
-  const hashedPassword = hashPassword('password123');
+  const hashedPassword = await hashPassword('password123');
 
   const superAdmin = await prisma.user.upsert({
     where: { email: 'super@school.com' },

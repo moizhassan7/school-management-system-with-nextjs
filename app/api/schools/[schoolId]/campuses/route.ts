@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
 
 const campusSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -14,18 +15,17 @@ export async function GET(
     { params }: { params: Promise<{ schoolId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+        if (error || !session) return error;
         const { schoolId } = await params;
+        const denied = assertSameSchool(session, schoolId);
+        if (denied) return denied;
 
-        // Verify school exists
         const school = await prisma.school.findUnique({
             where: { id: schoolId },
         });
-
         if (!school) {
-            return NextResponse.json(
-                { error: 'School not found' },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: 'School not found' }, { status: 404 });
         }
 
         const campuses = await prisma.campus.findMany({
@@ -48,7 +48,11 @@ export async function POST(
     { params }: { params: Promise<{ schoolId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'CREATE');
+        if (error || !session) return error;
         const { schoolId } = await params;
+        const denied = assertSameSchool(session, schoolId);
+        if (denied) return denied;
 
         // Verify school exists
         const school = await prisma.school.findUnique({

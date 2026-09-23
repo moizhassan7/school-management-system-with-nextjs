@@ -1,99 +1,89 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission, assertSameSchool, stripSecrets } from '@/lib/authz';
+import { handleApiError } from '@/lib/api-error';
 
 export async function GET(request: Request) {
   try {
+    const { session, error } = await requirePermission('FEES', 'VIEW');
+    if (error || !session) return error;
+
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('q');
+    const query = searchParams.get('q')?.trim();
+    if (!query) return NextResponse.json({ error: 'Query required' }, { status: 400 });
 
-    if (!query) return NextResponse.json({ error: "Query required" }, { status: 400 });
+    const schoolFilter =
+      session.user.role === 'SUPER_ADMIN' ? {} : { schoolId: session.user.schoolId || '__none__' };
 
-    // 1. Search Logic (Same as before)
-    const invoice = await prisma.invoice.findUnique({
-      where: { invoiceNo: query },
-      include: {
-        student: { include: { studentRecord: { include: { myClass: true, section: true } } } }
-      }
+    const invoice = await prisma.invoice.findFirst({
+      where: { invoiceNo: query, ...schoolFilter },
+      select: { studentId: true, schoolId: true },
     });
 
-    let studentRecord = null;
-
-    if (invoice) {
-      studentRecord = await prisma.studentRecord.findUnique({
-        where: { userId: invoice.studentId },
-        include: {
-          user: true,
-          myClass: true,
-          section: true,
-          parents: {
-            include: {
-              parentRecord: {
-                include: {
-                  user: true,
-                },
-              },
-            },
+    const studentRecord = invoice
+      ? await prisma.studentRecord.findUnique({
+          where: { userId: invoice.studentId },
+          include: studentInclude,
+        })
+      : await prisma.studentRecord.findFirst({
+          where: {
+            user: schoolFilter,
+            OR: [
+              { admissionNumber: { equals: query, mode: 'insensitive' } },
+              { user: { name: { contains: query, mode: 'insensitive' } } },
+            ],
           },
-        }
-      });
-    } else {
-      studentRecord = await prisma.studentRecord.findFirst({
-        where: {
-          OR: [
-            { admissionNumber: { equals: query, mode: 'insensitive' } },
-            { user: { name: { contains: query, mode: 'insensitive' } } }
-          ]
-        },
-        include: {
-          user: true,
-          myClass: true,
-          section: true,
-          parents: {
-            include: {
-              parentRecord: {
-                include: {
-                  user: true,
-                },
-              },
-            },
-          },
-        }
-      });
-    }
+          include: studentInclude,
+        });
 
     if (!studentRecord) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
-    // 2. Fetch Invoices WITH Payment History
+    const denied = assertSameSchool(session, studentRecord.user.schoolId);
+    if (denied) return denied;
+
     const invoices = await prisma.invoice.findMany({
       where: {
         studentId: studentRecord.userId,
-        status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] }
+        schoolId: studentRecord.user.schoolId,
+        status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
       },
-      include: {
-        payments: {  // <--- NEW: Include payment history
-          orderBy: { date: 'desc' }
-        }
-      },
-      orderBy: { dueDate: 'asc' }
+      include: { payments: { orderBy: { date: 'desc' } } },
+      orderBy: { dueDate: 'asc' },
     });
 
-    return NextResponse.json({
-      id: studentRecord.userId,
-      name: studentRecord.user.name,
-      gender: studentRecord.user.gender,
-      fatherName:
-        studentRecord.parents?.find((parent: any) => parent.relationship === 'FATHER')?.parentRecord?.user?.name ||
-        studentRecord.parents?.[0]?.parentRecord?.user?.name ||
-        '',
-      admissionNumber: studentRecord.admissionNumber,
-      className: `${studentRecord.myClass?.name || 'No Class'} ${studentRecord.section ? `(${studentRecord.section.name})` : ''}`,
-      invoices: invoices,
-    });
-
+    return NextResponse.json(
+      stripSecrets({
+        id: studentRecord.userId,
+        name: studentRecord.user.name,
+        gender: studentRecord.user.gender,
+        fatherName:
+          studentRecord.parents?.find((parent) => parent.relationship === 'FATHER')?.parentRecord?.user
+            ?.name ||
+          studentRecord.parents?.[0]?.parentRecord?.user?.name ||
+          '',
+        admissionNumber: studentRecord.admissionNumber,
+        className: `${studentRecord.myClass?.name || 'No Class'} ${
+          studentRecord.section ? `(${studentRecord.section.name})` : ''
+        }`,
+        invoices,
+      })
+    );
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    return handleApiError(error, 'Internal Error');
   }
 }
+
+const studentInclude = {
+  user: { select: { name: true, gender: true, schoolId: true } },
+  myClass: true,
+  section: true,
+  parents: {
+    include: {
+      parentRecord: {
+        include: { user: { select: { name: true } } },
+      },
+    },
+  },
+} as const;

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
-import crypto from 'crypto';
+import { hashPassword } from '@/lib/password';
+import { stripSecrets } from '@/lib/authz';
 import { can } from '@/lib/permissions';
 
 const VIEW_ROLES = ['ADMIN', 'SUPER_ADMIN', 'TEACHER', 'ACCOUNTANT', 'STAFF'];
@@ -97,7 +98,7 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    return NextResponse.json(user);
+    return NextResponse.json(stripSecrets(user));
   } catch (error) {
     console.error('GET Student Error:', error);
     return NextResponse.json(
@@ -141,6 +142,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (
+      data.schoolId !== undefined &&
+      session.user.role !== 'SUPER_ADMIN' &&
+      data.schoolId !== existing.schoolId
+    ) {
+      return NextResponse.json({ error: 'Cannot move student to another school' }, { status: 403 });
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const userData: Record<string, unknown> = {};
       if (data.name !== undefined) userData.name = data.name;
@@ -151,10 +160,7 @@ export async function PUT(
       if (data.schoolId !== undefined) userData.schoolId = data.schoolId;
       if (data.religion !== undefined) userData.religion = data.religion || null;
       if (data.password && data.password.length >= 6) {
-        userData.passwordHash = crypto
-          .createHash('sha256')
-          .update(data.password)
-          .digest('hex');
+        userData.passwordHash = await hashPassword(data.password);
       }
 
       const user = await tx.user.update({

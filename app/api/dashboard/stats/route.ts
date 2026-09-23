@@ -486,7 +486,7 @@ async function getStaffStats(userId: string, schoolId: string) {
   const staffRecord = await prisma.staffRecord.findUnique({
     where: { userId },
     include: {
-      user: true
+      user: { select: { id: true, name: true, email: true, phone: true, role: true } }
     }
   });
 

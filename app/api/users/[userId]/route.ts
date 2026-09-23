@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { Role } from '@prisma/client';
-import { requirePermission } from '@/lib/authz';
+import { assertSameSchool, requirePermission, stripSecrets } from '@/lib/authz';
+import { hashPassword } from '@/lib/password';
 import {
   permissionKey,
   resolveCampusIds,
@@ -37,8 +37,8 @@ export async function GET(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { error } = await requirePermission('USERS', 'VIEW');
-    if (error) return error;
+    const { session, error } = await requirePermission('USERS', 'VIEW');
+    if (error || !session) return error;
 
     const { userId } = await params;
     const user = await prisma.user.findUnique({
@@ -82,6 +82,8 @@ export async function GET(
     if (!user || user.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+    const denied = assertSameSchool(session, user.schoolId);
+    if (denied) return denied;
 
     const [effectivePermissions, campusIds] = await Promise.all([
       resolveUserPermissions(prisma, user.id, user.role),
@@ -121,14 +123,18 @@ export async function PUT(
     if (!existing || existing.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+    const denied = assertSameSchool(session, existing.schoolId);
+    if (denied) return denied;
+
+    if (data.schoolId && data.schoolId !== existing.schoolId && session.user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Cannot move user to another school' }, { status: 403 });
+    }
 
     if (data.role === Role.SUPER_ADMIN && session!.user.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Cannot assign SUPER_ADMIN' }, { status: 403 });
     }
 
-    const passwordHash = data.password
-      ? crypto.createHash('sha256').update(data.password).digest('hex')
-      : undefined;
+    const passwordHash = data.password ? await hashPassword(data.password) : undefined;
 
     const updated = await prisma.$transaction(async (tx) => {
       const user = await tx.user.update({
@@ -179,7 +185,7 @@ export async function PUT(
       return user;
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json(stripSecrets(updated));
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ errors: error.issues }, { status: 400 });
@@ -199,14 +205,16 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { error } = await requirePermission('USERS', 'DELETE');
-    if (error) return error;
+    const { session, error } = await requirePermission('USERS', 'DELETE');
+    if (error || !session) return error;
 
     const { userId } = await params;
     const existing = await prisma.user.findUnique({ where: { id: userId } });
     if (!existing || existing.deletedAt) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+    const denied = assertSameSchool(session, existing.schoolId);
+    if (denied) return denied;
     await prisma.user.update({
       where: { id: userId },
       data: { deletedAt: new Date(), suspended: true },

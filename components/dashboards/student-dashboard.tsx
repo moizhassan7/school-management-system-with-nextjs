@@ -38,7 +38,7 @@ export default function StudentDashboard({ data }: StudentDashboardProps) {
           </div>
         </div>
 
-        <div className="bento-tile flex flex-col justify-between p-5">
+        <Link href="/portal/student/attendance" className="bento-tile flex cursor-pointer flex-col justify-between p-5">
           <div className="flex items-start justify-between">
             <div className="rounded-xl bg-emerald-100 p-2.5 text-emerald-700">
               <CalendarCheck className="h-5 w-5" />
@@ -55,9 +55,9 @@ export default function StudentDashboard({ data }: StudentDashboardProps) {
             <p className="text-sm text-muted-foreground">Attendance</p>
             <h3 className="mt-1 font-heading text-3xl font-bold text-foreground">{safeStats.attendancePercentage}%</h3>
           </div>
-        </div>
+        </Link>
 
-        <Link href="/student/fees" className="bento-tile flex cursor-pointer flex-col justify-between p-5">
+        <Link href="/portal/student/fees" className="bento-tile flex cursor-pointer flex-col justify-between p-5">
           <div className="rounded-xl bg-accent p-2.5 text-cta w-fit">
             <Wallet className="h-5 w-5" />
           </div>
@@ -69,7 +69,7 @@ export default function StudentDashboard({ data }: StudentDashboardProps) {
           </div>
         </Link>
 
-        <div className="bento-tile flex flex-col justify-between p-5">
+        <Link href="/portal/student/results" className="bento-tile flex cursor-pointer flex-col justify-between p-5">
           <div className="rounded-xl bg-secondary p-2.5 text-primary w-fit">
             <BookOpen className="h-5 w-5" />
           </div>
@@ -77,7 +77,7 @@ export default function StudentDashboard({ data }: StudentDashboardProps) {
             <p className="text-sm text-muted-foreground">Exams Taken</p>
             <h3 className="mt-1 font-heading text-3xl font-bold text-foreground">{safeStats.totalExams}</h3>
           </div>
-        </div>
+        </Link>
 
         <div className="bento-tile flex flex-col p-5">
           <h3 className="mb-3 font-heading text-lg font-semibold text-foreground">Academic Info</h3>

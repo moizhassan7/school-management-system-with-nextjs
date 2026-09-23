@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/authz';
+import { forbidOrMissing, schoolIdForCampus } from '@/lib/tenant';
 
 const classGroupSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -14,7 +16,11 @@ export async function GET(
     { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+        if (error || !session) return error;
         const { campusId, classGroupId } = await params;
+        const denied = forbidOrMissing(session, await schoolIdForCampus(campusId));
+        if (denied) return denied;
 
         const classGroup = await prisma.classGroup.findFirst({
             where: {
@@ -53,7 +59,11 @@ export async function PUT(
     { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'EDIT');
+        if (error || !session) return error;
         const { campusId, classGroupId } = await params;
+        const denied = forbidOrMissing(session, await schoolIdForCampus(campusId));
+        if (denied) return denied;
         const body = await request.json();
 
         const validatedData = classGroupSchema.parse(body);
@@ -101,7 +111,11 @@ export async function DELETE(
     { params }: { params: Promise<{ campusId: string; classGroupId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'DELETE');
+        if (error || !session) return error;
         const { campusId, classGroupId } = await params;
+        const denied = forbidOrMissing(session, await schoolIdForCampus(campusId));
+        if (denied) return denied;
 
         // Verify class group exists and belongs to campus
         const existingClassGroup = await prisma.classGroup.findFirst({

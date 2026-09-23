@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/authz';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
 
 const schoolSchema = z.object({
   name: z.string().min(1).optional(),
@@ -18,10 +18,12 @@ export async function GET(
   { params }: { params: Promise<{ schoolId: string }> }
 ) {
   try {
-    const { error } = await requirePermission('CONFIGURATION', 'VIEW');
-    if (error) return error;
+    const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+    if (error || !session) return error;
 
     const { schoolId } = await params;
+    const denied = assertSameSchool(session, schoolId);
+    if (denied) return denied;
     const school = await prisma.school.findUnique({ where: { id: schoolId } });
     if (!school) {
       return NextResponse.json({ error: 'School not found' }, { status: 404 });
@@ -38,10 +40,12 @@ export async function PUT(
   { params }: { params: Promise<{ schoolId: string }> }
 ) {
   try {
-    const { error } = await requirePermission('CONFIGURATION', 'EDIT');
-    if (error) return error;
+    const { session, error } = await requirePermission('CONFIGURATION', 'EDIT');
+    if (error || !session) return error;
 
     const { schoolId } = await params;
+    const denied = assertSameSchool(session, schoolId);
+    if (denied) return denied;
     const body = await request.json();
     const data = schoolSchema.parse(body);
 
@@ -63,10 +67,12 @@ export async function DELETE(
   { params }: { params: Promise<{ schoolId: string }> }
 ) {
   try {
-    const { error } = await requirePermission('CONFIGURATION', 'DELETE');
-    if (error) return error;
+    const { session, error } = await requirePermission('CONFIGURATION', 'DELETE');
+    if (error || !session) return error;
 
     const { schoolId } = await params;
+    const denied = assertSameSchool(session, schoolId);
+    if (denied) return denied;
     // Soft-deactivate instead of hard delete
     const school = await prisma.school.update({
       where: { id: schoolId },

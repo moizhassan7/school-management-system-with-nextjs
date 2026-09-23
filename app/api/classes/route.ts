@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { can } from '@/lib/permissions';
+import { schoolIdForClassGroup } from '@/lib/tenant';
 
 // GET /api/classes - Get all classes
 export async function GET(request: NextRequest) {
@@ -66,6 +68,9 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (!can(session.user, 'CONFIGURATION', 'CREATE')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, classGroupId } = body;
@@ -75,6 +80,11 @@ export async function POST(request: NextRequest) {
         { error: 'Name and class group are required' },
         { status: 400 }
       );
+    }
+
+    const groupSchoolId = await schoolIdForClassGroup(classGroupId);
+    if (!groupSchoolId || (session.user.role !== 'SUPER_ADMIN' && groupSchoolId !== session.user.schoolId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const cls = await prisma.class.create({

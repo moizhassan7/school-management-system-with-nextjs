@@ -27,6 +27,10 @@ export default auth((req) => {
     return Response.redirect(new URL('/', req.url));
   }
 
+  if (pathname.startsWith('/portal/student') && req.auth?.user?.role !== 'STUDENT') {
+    return Response.redirect(new URL('/', req.url));
+  }
+
   if (!canViewPath(req.auth?.user, pathname)) {
     return Response.redirect(new URL('/', req.url));
   }

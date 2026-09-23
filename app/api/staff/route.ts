@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { auth } from '@/auth';
+import { can } from '@/lib/permissions';
+import { hashPassword } from '@/lib/password';
+import { stripSecrets } from '@/lib/authz';
 
 // Validation Schema
 const staffSchema = z.object({
@@ -32,46 +34,90 @@ const staffSchema = z.object({
   inchargeSectionId: z.string().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user) {
-      return NextResponse.json([], { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!can(session.user, 'TEACHERS', 'VIEW')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const staff = await prisma.staffRecord.findMany({
-      where: {
-        user: {
-          ...(session.user.schoolId
-            ? { schoolId: session.user.schoolId }
-            : {}),
-          deletedAt: null,
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, Number(searchParams.get('page') || 1));
+    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 25)));
+    const q = searchParams.get('q')?.trim() || '';
+
+    const userFilter: Record<string, unknown> = {
+      deletedAt: null,
+      ...(session.user.schoolId ? { schoolId: session.user.schoolId } : {}),
+    };
+
+    const where: Record<string, unknown> = q
+      ? {
+          user: userFilter,
+          OR: [
+            { designation: { contains: q, mode: 'insensitive' } },
+            { department: { contains: q, mode: 'insensitive' } },
+            { user: { is: { ...userFilter, name: { contains: q, mode: 'insensitive' } } } },
+            { user: { is: { ...userFilter, email: { contains: q, mode: 'insensitive' } } } },
+          ],
+        }
+      : { user: userFilter };
+
+    const [total, staff] = await Promise.all([
+      prisma.staffRecord.count({ where }),
+      prisma.staffRecord.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true, role: true } },
+          sectionsIncharged: { include: { myClass: true } },
+          assignments: {
+            include: { subject: true, myClass: true, section: true },
+          },
         },
-      },
-      include: {
-        user: { select: { name: true, email: true, phone: true, role: true } },
-        sectionsIncharged: { include: { myClass: true } },
-        assignments: {
-          include: { subject: true, myClass: true, section: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return NextResponse.json({
+      data: staff,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     });
-    return NextResponse.json(staff);
   } catch (error) {
     console.error('Error fetching staff:', error);
-    return NextResponse.json([], { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch staff' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const session = await auth();
-    if (!session?.user?.schoolId) {
+    if (!session?.user?.schoolId && session?.user?.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!can(session.user, 'TEACHERS', 'CREATE')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const body = await request.json();
     const data = staffSchema.parse(body);
+
+    if (data.role === 'ADMIN' && !['ADMIN', 'SUPER_ADMIN'].includes(String(session.user.role))) {
+      return NextResponse.json({ error: 'Cannot create ADMIN' }, { status: 403 });
+    }
+
+    const schoolId = session.user.role === 'SUPER_ADMIN'
+      ? session.user.schoolId
+      : session.user.schoolId;
+    if (!schoolId) {
+      return NextResponse.json({ error: 'School is required' }, { status: 400 });
+    }
 
     // Prevalidate assignment references to avoid FK rollback
     if (data.assignments && data.assignments.length > 0) {
@@ -99,7 +145,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const passwordHash = crypto.createHash('sha256').update(data.password).digest('hex');
+    const passwordHash = await hashPassword(data.password);
 
     // Transaction to create User + Staff Record + Assignments
     const result = await prisma.$transaction(async (tx) => {
@@ -112,7 +158,7 @@ export async function POST(request: Request) {
           phone: data.phone,
           address: data.address,
           role: data.role, // TEACHER or STAFF
-          schoolId: session.user.schoolId!,
+          schoolId,
         }
       });
 

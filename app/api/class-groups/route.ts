@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/authz';
 
 export async function GET() {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+        if (error || !session) return error;
+
         const classGroups = await prisma.classGroup.findMany({
+            where:
+              session.user.role === 'SUPER_ADMIN'
+                ? {}
+                : { campus: { schoolId: session.user.schoolId || '__none__' } },
             include: {
                 classes: {
                     include: {

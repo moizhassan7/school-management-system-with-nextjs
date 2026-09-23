@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
+import { applyInvoicePayment, PaymentRejectedError } from '@/lib/payments';
+import { handleApiError } from '@/lib/api-error';
 
 const paymentSchema = z.object({
-  amount: z.coerce.number().min(1),
+  amount: z.coerce.number().positive(),
   method: z.enum(['CASH', 'BANK_TRANSFER', 'ONLINE', 'CHEQUE']),
   remarks: z.string().optional(),
 });
@@ -13,13 +16,22 @@ export async function POST(
   { params }: { params: Promise<{ parentId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('FEES', 'CREATE');
+    if (error || !session) return error;
+
     const { parentId } = await params;
-    const body = await request.json();
-    const { amount, method, remarks } = paymentSchema.parse(body);
+    const { amount, method, remarks } = paymentSchema.parse(await request.json());
 
-    let remainingPayment = amount;
+    const parentUser = await prisma.user.findUnique({
+      where: { id: parentId },
+      select: { schoolId: true, role: true },
+    });
+    if (!parentUser || parentUser.role !== 'PARENT') {
+      return NextResponse.json({ error: 'Parent not found' }, { status: 404 });
+    }
+    const denied = assertSameSchool(session, parentUser.schoolId);
+    if (denied) return denied;
 
-    // 1. Fetch all children of this parent
     const parentRecord = await prisma.parentRecord.findUnique({
       where: { userId: parentId },
       include: {
@@ -29,100 +41,89 @@ export async function POST(
               include: {
                 user: {
                   include: {
-                    // Get unpaid invoices sorted by Due Date (Oldest First)
                     invoices: {
-                      where: {
-                        status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] }
-                      },
-                      orderBy: { dueDate: 'asc' }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+                      where: { status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] } },
+                      orderBy: { dueDate: 'asc' },
+                      select: { id: true, invoiceNo: true, dueDate: true, schoolId: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!parentRecord) {
       return NextResponse.json({ error: 'Parent not found' }, { status: 404 });
     }
 
-    // 2. Flatten all invoices from all children into one list
-    let allInvoices = parentRecord.students.flatMap(kinship => 
-      kinship.studentRecord.user.invoices.map(inv => ({
-        ...inv,
-        studentName: kinship.studentRecord.user.name
-      }))
-    );
+    const invoiceQueue = parentRecord.students
+      .flatMap((kinship) =>
+        kinship.studentRecord.user.invoices.map((inv) => ({
+          ...inv,
+          studentName: kinship.studentRecord.user.name,
+        }))
+      )
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
-    // 3. Sort ALL invoices by date (Oldest debt gets paid first, regardless of child)
-    allInvoices.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-
-    // 4. Perform the distribution in a transaction
     const results = await prisma.$transaction(async (tx) => {
-      const paymentsMade = [];
+      let remaining = amount;
+      const paymentsMade: {
+        invoiceNo: string;
+        student: string;
+        paid: number;
+        status: string;
+      }[] = [];
 
-      for (const invoice of allInvoices) {
-        if (remainingPayment <= 0) break;
+      for (const invoice of invoiceQueue) {
+        if (remaining <= 0) break;
+        if (invoice.schoolId !== parentUser.schoolId) continue;
 
-        const alreadyPaid = Number(invoice.paidAmount);
-        const totalAmount = Number(invoice.totalAmount);
-        const dueOnInvoice = totalAmount - alreadyPaid;
+        const fresh = await tx.invoice.findUnique({ where: { id: invoice.id } });
+        if (!fresh || fresh.status === 'CANCELLED' || fresh.status === 'PAID') continue;
 
-        // Determine how much we can pay for THIS invoice
-        const amountToPay = Math.min(remainingPayment, dueOnInvoice);
+        const due = Number(fresh.totalAmount) - Number(fresh.paidAmount);
+        if (due <= 0) continue;
 
-        if (amountToPay > 0) {
-          // A. Update Invoice Status
-          const newPaidAmount = alreadyPaid + amountToPay;
-          const newStatus = newPaidAmount >= totalAmount ? 'PAID' : 'PARTIAL';
-
-          await tx.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              paidAmount: newPaidAmount,
-              status: newStatus,
-            }
+        const amountToPay = Math.min(remaining, due);
+        try {
+          await applyInvoicePayment(tx, {
+            invoiceId: fresh.id,
+            amount: amountToPay,
+            method,
+            transactionId: remarks || null,
+            schoolId: fresh.schoolId,
           });
-
-          // B. Record the Transaction
-          await tx.payment.create({
-            data: {
-              amount: amountToPay,
-              method: method,
-              date: new Date(),
-              invoiceId: invoice.id,
-              schoolId: invoice.schoolId,
-              transactionId: remarks // Optional: Store notes here
-            }
-          });
-
-          paymentsMade.push({
-            invoiceNo: invoice.invoiceNo,
-            student: invoice.studentName,
-            paid: amountToPay,
-            status: newStatus
-          });
-
-          // C. Decrease the pot
-          remainingPayment -= amountToPay;
+        } catch (err) {
+          if (err instanceof PaymentRejectedError) continue;
+          throw err;
         }
+
+        const after = await tx.invoice.findUnique({ where: { id: fresh.id } });
+        paymentsMade.push({
+          invoiceNo: invoice.invoiceNo,
+          student: invoice.studentName,
+          paid: amountToPay,
+          status: after?.status || 'PARTIAL',
+        });
+        remaining -= amountToPay;
       }
 
-      return paymentsMade;
+      return { paymentsMade, remaining };
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      distributedAmount: amount - remainingPayment,
-      remainingBalance: remainingPayment, // Any money left over (excess)
-      breakdown: results 
+    return NextResponse.json({
+      success: true,
+      distributedAmount: amount - results.remaining,
+      remainingBalance: results.remaining,
+      breakdown: results.paymentsMade,
     });
-
   } catch (error) {
-    console.error("Payment Distribution Error:", error);
-    return NextResponse.json({ error: 'Payment processing failed' }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid payment', issues: error.issues }, { status: 400 });
+    }
+    return handleApiError(error, 'Payment processing failed');
   }
 }

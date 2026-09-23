@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requirePermission } from '@/lib/authz'
+import { forbidOrMissing, schoolIdForSubjectGroup } from '@/lib/tenant'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ subjectGroupId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'VIEW')
+    if (error || !session) return error
     const { subjectGroupId } = await params
+    const denied = forbidOrMissing(session, await schoolIdForSubjectGroup(subjectGroupId))
+    if (denied) return denied
     const subjectGroup = await prisma.subjectGroup.findUnique({
       where: { id: subjectGroupId },
       select: { classGroupId: true }
@@ -34,7 +40,11 @@ export async function POST(
   { params }: { params: Promise<{ subjectGroupId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'CREATE')
+    if (error || !session) return error
     const { subjectGroupId } = await params
+    const denied = forbidOrMissing(session, await schoolIdForSubjectGroup(subjectGroupId))
+    if (denied) return denied
     const json = await request.json()
     const { name } = json
 

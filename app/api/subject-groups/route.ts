@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
+import { requirePermission } from '@/lib/authz'
+import { forbidOrMissing, schoolIdForClassGroup } from '@/lib/tenant'
 
 const subjectGroupSchema = z.object({
   name: z.string().min(1),
@@ -11,7 +13,13 @@ const subjectGroupSchema = z.object({
 
 export async function GET() {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'VIEW')
+    if (error || !session) return error
     const subjectGroups = await prisma.subjectGroup.findMany({
+      where:
+        session.user.role === 'SUPER_ADMIN'
+          ? {}
+          : { classGroup: { campus: { schoolId: session.user.schoolId || '__none__' } } },
       include: {
         classGroup: {
           include: {
@@ -32,8 +40,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'CREATE')
+    if (error || !session) return error
     const body = await request.json()
     const data = subjectGroupSchema.parse(body)
+    const denied = forbidOrMissing(session, await schoolIdForClassGroup(data.classGroupId))
+    if (denied) return denied
 
     const exists = await prisma.classGroup.findUnique({ where: { id: data.classGroupId } })
     if (!exists) {

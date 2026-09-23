@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { saveUploadedFile } from '@/lib/upload';
+import { requirePermission } from '@/lib/authz';
 
 export async function POST(request: Request) {
     try {
+        const { error } = await requirePermission('CONFIGURATION', 'EDIT');
+        if (error) return error;
         const formData = await request.formData();
         const file = formData.get('file') as File;
 

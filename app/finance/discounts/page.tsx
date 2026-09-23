@@ -60,14 +60,26 @@ export default function DiscountsPage() {
   });
 
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       fetch('/api/finance/discounts').then(res => res.json()),
       fetch('/api/finance/fee-heads').then(res => res.json())
     ]).then(([dData, fhData]) => {
-      setDiscounts(dData);
-      setFeeHeads(fhData);
-      setIsLoading(false);
+      if (cancelled) return;
+      setDiscounts(Array.isArray(dData) ? dData : []);
+      setFeeHeads(Array.isArray(fhData) ? fhData : []);
+    }).catch((err) => {
+      console.error(err);
+      if (!cancelled) {
+        setDiscounts([]);
+        setFeeHeads([]);
+      }
+    }).finally(() => {
+      if (!cancelled) setIsLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {

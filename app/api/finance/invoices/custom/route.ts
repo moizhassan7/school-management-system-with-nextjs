@@ -1,149 +1,156 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
+import { handleApiError } from '@/lib/api-error';
+
+const itemSchema = z.object({
+  feeHeadId: z.string().min(1),
+  amount: z.coerce.number().nonnegative(),
+});
+
+const customInvoiceSchema = z.object({
+  schoolId: z.string().min(1).optional(),
+  studentId: z.string().min(1),
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2000).max(2100),
+  dueDate: z.string().min(1),
+  items: z.array(itemSchema).min(1),
+  cancelInvoiceNo: z.string().optional(),
+});
 
 export async function POST(request: Request) {
   try {
-    const { 
-      schoolId, 
-      studentId, 
-      month, 
-      year, 
-      dueDate, 
-      items, 
-      cancelInvoiceNo // <--- Changed from cancelPrevious (boolean) to string
-    } = await request.json();
+    const { session, error } = await requirePermission('FEES', 'CREATE');
+    if (error || !session) return error;
 
-    const studentRecord = await prisma.studentRecord.findUnique({
-        where: { userId: studentId }
+    const data = customInvoiceSchema.parse(await request.json());
+    const schoolId =
+      session.user.role === 'SUPER_ADMIN'
+        ? data.schoolId || session.user.schoolId
+        : session.user.schoolId;
+
+    if (!schoolId) {
+      return NextResponse.json({ error: 'School is required' }, { status: 400 });
+    }
+
+    const student = await prisma.user.findUnique({
+      where: { id: data.studentId },
+      select: { schoolId: true, studentRecord: { select: { admissionNumber: true } } },
     });
+    if (!student?.studentRecord) {
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+    }
+    const denied = assertSameSchool(session, student.schoolId);
+    if (denied) return denied;
+    if (student.schoolId !== schoolId) {
+      return NextResponse.json({ error: 'Student does not belong to this school' }, { status: 403 });
+    }
 
-    if (!studentRecord) return NextResponse.json({ error: "Student not found" }, { status: 404 });
-
-    // 1. Cancel Specific Invoice by Barcode (if provided)
-    if (cancelInvoiceNo) {
-        const prevInvoice = await prisma.invoice.findUnique({
-            where: { invoiceNo: cancelInvoiceNo }
+    const invoice = await prisma.$transaction(async (tx) => {
+      if (data.cancelInvoiceNo) {
+        const prevInvoice = await tx.invoice.findUnique({
+          where: { invoiceNo: data.cancelInvoiceNo },
         });
-
         if (prevInvoice) {
-            // Security check: Ensure we are cancelling an invoice for the SAME student
-            if (prevInvoice.studentId !== studentId) {
-                return NextResponse.json({ error: "Invoice to cancel does not belong to this student" }, { status: 400 });
-            }
-
-            await prisma.invoice.update({
-                where: { id: prevInvoice.id },
-                data: { status: 'CANCELLED' }
+          if (prevInvoice.studentId !== data.studentId || prevInvoice.schoolId !== schoolId) {
+            throw Object.assign(new Error('Invoice to cancel does not belong to this student'), {
+              status: 400,
             });
+          }
+          await tx.invoice.update({
+            where: { id: prevInvoice.id },
+            data: { status: 'CANCELLED' },
+          });
         }
-    }
+      }
 
-    // 2. Prevent accidental duplicate challan for same month/year
-    const monthInt = parseInt(month);
-    const yearInt = parseInt(year);
-    const existingSamePeriod = await prisma.invoice.findFirst({
-      where: {
-        studentId,
-        month: monthInt,
-        year: yearInt,
-        status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
-      },
-      select: { invoiceNo: true },
-    });
-
-    if (existingSamePeriod && !cancelInvoiceNo) {
-      return NextResponse.json(
-        {
-          error:
-            'This student already has an unpaid challan for the selected month. Cancel previous challan by barcode or clear dues first.',
-          invoiceNo: existingSamePeriod.invoiceNo,
-        },
-        { status: 409 }
-      );
-    }
-
-    // 3. Build final invoice items and auto-add arrears from pending dues
-    const finalItems = [...items];
-    const pendingInvoices = await prisma.invoice.findMany({
-      where: {
-        studentId,
-        status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
-      },
-      select: {
-        id: true,
-        totalAmount: true,
-        paidAmount: true,
-      },
-    });
-
-    const pendingArrears = pendingInvoices.reduce(
-      (sum, inv) => sum + Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount || 0)),
-      0
-    );
-
-    if (pendingArrears > 0) {
-      let arrearsHead = await prisma.feeHead.findFirst({
+      const existingSamePeriod = await tx.invoice.findFirst({
         where: {
-          schoolId,
-          name: { equals: 'Arrears', mode: 'insensitive' },
+          studentId: data.studentId,
+          month: data.month,
+          year: data.year,
+          status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
         },
+        select: { invoiceNo: true },
       });
 
-      if (!arrearsHead) {
-        arrearsHead = await prisma.feeHead.create({
-          data: {
-            schoolId,
-            name: 'Arrears',
-            type: 'ONE_TIME',
-          },
-        });
+      if (existingSamePeriod && !data.cancelInvoiceNo) {
+        throw Object.assign(
+          new Error(
+            'This student already has an unpaid challan for the selected month. Cancel previous challan by barcode or clear dues first.'
+          ),
+          { status: 409, invoiceNo: existingSamePeriod.invoiceNo }
+        );
       }
 
-      const alreadyIncluded = finalItems.some((item: any) => item.feeHeadId === arrearsHead.id);
-      if (!alreadyIncluded) {
-        finalItems.push({
-          feeHeadId: arrearsHead.id,
-          amount: pendingArrears,
+      const finalItems = [...data.items];
+      const pendingInvoices = await tx.invoice.findMany({
+        where: {
+          studentId: data.studentId,
+          status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
+        },
+        select: { totalAmount: true, paidAmount: true },
+      });
+
+      const pendingArrears = pendingInvoices.reduce(
+        (sum, inv) => sum + Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount || 0)),
+        0
+      );
+
+      if (pendingArrears > 0) {
+        let arrearsHead = await tx.feeHead.findFirst({
+          where: { schoolId, name: { equals: 'Arrears', mode: 'insensitive' } },
         });
-      }
-    }
-
-    // 4. Create New Invoice
-    const totalAmount = finalItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
-    // Use a timestamp suffix for uniqueness
-    const invoiceNo = `INV-${yearInt}${monthInt.toString().padStart(2, '0')}-${studentRecord.admissionNumber}-${Date.now().toString().slice(-6)}`;
-
-    const invoice = await prisma.invoice.create({
-      data: {
-        schoolId,
-        studentId,
-        month: monthInt,
-        year: yearInt,
-        dueDate: new Date(dueDate),
-        invoiceNo,
-        totalAmount,
-        status: 'UNPAID',
-        items: {
-            create: finalItems.map((item: any) => ({
-                feeHeadId: item.feeHeadId,
-                amount: item.amount,
-                originalAmount: item.amount,
-            }))
+        if (!arrearsHead) {
+          arrearsHead = await tx.feeHead.create({
+            data: { schoolId, name: 'Arrears', type: 'ONE_TIME' },
+          });
         }
-      },
-      include: {
-        items: {
-          include: {
-            feeHead: true,
+        const alreadyIncluded = finalItems.some((item) => item.feeHeadId === arrearsHead!.id);
+        if (!alreadyIncluded) {
+          finalItems.push({ feeHeadId: arrearsHead.id, amount: pendingArrears });
+        }
+      }
+
+      const totalAmount = finalItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const admission = student.studentRecord?.admissionNumber || 'STU';
+      const invoiceNo = `INV-${data.year}${String(data.month).padStart(2, '0')}-${admission}-${Date.now().toString().slice(-6)}`;
+
+      return tx.invoice.create({
+        data: {
+          schoolId,
+          studentId: data.studentId,
+          month: data.month,
+          year: data.year,
+          dueDate: new Date(data.dueDate),
+          invoiceNo,
+          totalAmount,
+          status: 'UNPAID',
+          items: {
+            create: finalItems.map((item) => ({
+              feeHeadId: item.feeHeadId,
+              amount: item.amount,
+              originalAmount: item.amount,
+            })),
           },
         },
-      },
+        include: { items: { include: { feeHead: true } } },
+      });
     });
 
     return NextResponse.json(invoice, { status: 201 });
-
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed to create challan" }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid challan', issues: error.issues }, { status: 400 });
+    }
+    const status = (error as { status?: number })?.status;
+    if (status === 400 || status === 409) {
+      return NextResponse.json(
+        { error: (error as Error).message, invoiceNo: (error as { invoiceNo?: string }).invoiceNo },
+        { status }
+      );
+    }
+    return handleApiError(error, 'Failed to create challan');
   }
 }

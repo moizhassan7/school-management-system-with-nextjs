@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { can } from '@/lib/permissions';
+import { schoolIdForSubjectGroup } from '@/lib/tenant';
 
 // GET /api/subjects - Get all subjects
 export async function GET(request: NextRequest) {
@@ -72,6 +74,9 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (!can(session.user, 'CONFIGURATION', 'CREATE')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, code, subjectGroupId, description } = body;
@@ -81,6 +86,11 @@ export async function POST(request: NextRequest) {
         { error: 'Name and subjectGroupId are required' },
         { status: 400 }
       );
+    }
+
+    const groupSchoolId = await schoolIdForSubjectGroup(subjectGroupId);
+    if (!groupSchoolId || (session.user.role !== 'SUPER_ADMIN' && groupSchoolId !== session.user.schoolId)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const subject = await prisma.subject.create({

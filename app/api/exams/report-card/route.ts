@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            profilePath: true
+            profilePath: true,
+            schoolId: true,
           }
         },
         myClass: {
@@ -49,6 +50,9 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
+    if (session.user.role !== 'SUPER_ADMIN' && student.user.schoolId !== session.user.schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get exam details
     const exam = await prisma.exam.findUnique({
@@ -63,6 +67,9 @@ export async function GET(request: NextRequest) {
         { error: 'Exam not found' },
         { status: 404 }
       );
+    }
+    if (session.user.role !== 'SUPER_ADMIN' && exam.schoolId !== session.user.schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get student's subject group

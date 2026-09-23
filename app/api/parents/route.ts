@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import crypto from 'crypto';
+import { requirePermission, assertSameSchool, stripSecrets, type AppSession } from '@/lib/authz';
+import { hashPassword } from '@/lib/password';
+import { handleApiError } from '@/lib/api-error';
 
 const parentSchema = z.object({
   // User Data
@@ -22,20 +24,44 @@ const parentSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const data = parentSchema.parse(body);
-  const passwordHash = crypto.createHash('sha256').update(data.password).digest('hex');
-
+  let data: z.infer<typeof parentSchema> | null = null;
+  let session: AppSession | null = null;
   try {
+    const authResult = await requirePermission('STUDENTS', 'CREATE');
+    if (authResult.error || !authResult.session) return authResult.error;
+    session = authResult.session;
+
+    const body = await request.json();
+    const parsed = parentSchema.parse(body);
+    data = parsed;
+    const schoolId =
+      session.user.role === 'SUPER_ADMIN' ? parsed.schoolId : session.user.schoolId || '';
+    if (!schoolId) {
+      return NextResponse.json({ error: 'School is required' }, { status: 400 });
+    }
+    const denied = assertSameSchool(session, schoolId);
+    if (denied) return denied;
+
+    if (parsed.studentId) {
+      const student = await prisma.studentRecord.findUnique({
+        where: { id: parsed.studentId },
+        include: { user: { select: { schoolId: true } } },
+      });
+      if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+      const studentDenied = assertSameSchool(session, student.user.schoolId);
+      if (studentDenied) return studentDenied;
+    }
+
+    const passwordHash = await hashPassword(parsed.password);
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          name: data.name,
-          email: data.email,
+          name: parsed.name,
+          email: parsed.email,
           passwordHash,
-          phone: data.phone,
-          address: data.address,
-          schoolId: data.schoolId,
+          phone: parsed.phone,
+          address: parsed.address,
+          schoolId,
           role: 'PARENT',
         },
       });
@@ -43,17 +69,17 @@ export async function POST(request: Request) {
       const parentRecord = await tx.parentRecord.create({
         data: {
           userId: user.id,
-          occupation: data.occupation,
-          cnic: data.cnic,
+          occupation: parsed.occupation,
+          cnic: parsed.cnic,
         }
       });
 
-      if (data.studentId) {
+      if (parsed.studentId) {
         await tx.kinship.create({
           data: {
             parentId: parentRecord.id,
-            studentId: data.studentId,
-            relationship: data.relationship || 'GUARDIAN',
+            studentId: parsed.studentId,
+            relationship: parsed.relationship || 'GUARDIAN',
             isPrimary: true
           }
         });
@@ -65,11 +91,11 @@ export async function POST(request: Request) {
       };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(stripSecrets(result), { status: 201 });
   } catch (error: any) {
     // If parent user email already exists, link that existing parent instead of failing admission flow.
     const isDuplicateEmail = error?.code === 'P2002';
-    if (isDuplicateEmail) {
+    if (isDuplicateEmail && data) {
       const existing = await prisma.user.findUnique({
         where: { email: data.email },
         include: { parentRecord: true },
@@ -104,13 +130,16 @@ export async function POST(request: Request) {
           },
         });
 
+        const existingDenied = assertSameSchool(session, existing.schoolId);
+        if (existingDenied) return existingDenied;
+
         return NextResponse.json(
-          {
+          stripSecrets({
             ...existing,
             parentRecord: ensuredParentRecord,
             kinship,
             reusedExistingParent: true,
-          },
+          }),
           { status: 200 }
         );
       }
@@ -118,7 +147,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Parent email already exists' }, { status: 409 });
     }
 
-    console.error('Create Parent Error:', error);
-    return NextResponse.json({ error: 'Failed to create parent' }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'Invalid parent', issues: error.issues }, { status: 400 });
+    }
+    return handleApiError(error, 'Failed to create parent');
   }
 }

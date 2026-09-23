@@ -36,6 +36,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const exam = await prisma.exam.findUnique({
+      where: { id: examId },
+      select: { schoolId: true },
+    });
+    if (!exam) return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
+    if (session.user.role !== 'SUPER_ADMIN' && exam.schoolId !== session.user.schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Get exam configuration
     const configuration = await prisma.examConfiguration.findUnique({
       where: {

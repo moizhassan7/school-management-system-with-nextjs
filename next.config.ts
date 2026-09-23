@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 };
 

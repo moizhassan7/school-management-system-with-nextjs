@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { Role } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { permissionKey, ROLE_DEFAULT_MODULES } from '@/lib/permissions';
+import { requirePermission } from '@/lib/authz';
 
 export async function GET(request: Request) {
   try {
+    const { error } = await requirePermission('USERS', 'VIEW');
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role') as Role | null;
 

@@ -79,6 +79,7 @@ model AccountHead {
   id        String   @id @default(cuid())
   name      String
   schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   subheads  AccountSubHead[] @relation("AccountHeadSubheads")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -101,10 +102,21 @@ model School {
   
   campuses  Campus[]
   users     User[]
+  studentRecords StudentRecord[]
   academicYears AcademicYear[]
   feeHeads  FeeHead[] // Relation to Finance
   GradeSystems GradeSystem[] // Relation to Examination
   attendanceRecords Attendance[]
+  accountHeads AccountHead[]
+  accountSubHeads AccountSubHead[]
+  studentFeeStructures StudentFeeStructure[]
+  challans Challan[]
+  challanPayments ChallanPayment[]
+  feeStructures FeeStructure[]
+  discounts Discount[]
+  invoices Invoice[]
+  payments Payment[]
+  exams Exam[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -184,10 +196,13 @@ model StudentRecord {
   admissionDate    DateTime
   
   classId          String?
-  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  myClass          Class?   @relation(fields: [classId], references: [id], onDelete: Restrict)
   
   sectionId        String?
-  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section          Section? @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  schoolId         String?
+  school           School?  @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   
   // NEW: Student's chosen stream
   subjectGroupId   String?
@@ -199,6 +214,9 @@ model StudentRecord {
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId, admissionNumber])
+  @@index([classId])
 }
 
 model Campus {
@@ -376,9 +394,9 @@ model AcademicYearStudentRecord {
   studentRecordId String
   studentRecord   StudentRecord @relation(fields: [studentRecordId], references: [id], onDelete: Cascade)
   classId         String?
-  myClass         Class?   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  myClass         Class?   @relation(fields: [classId], references: [id], onDelete: Restrict)
   sectionId       String?
-  section         Section? @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section         Section? @relation(fields: [sectionId], references: [id], onDelete: Restrict)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -409,6 +427,7 @@ model StudentFeeStructure {
   classId         String?
   myClass         Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
   schoolId        String
+  school          School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   items           StudentFeeStructureItem[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -441,13 +460,15 @@ model Challan {
   items         ChallanItem[]
   payments      ChallanPayment[]
   schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  // Optional self-relation to cancel a previous challan
   cancelsChallanId String? @unique
   cancelsChallan   Challan? @relation("ChallanCancellation", fields: [cancelsChallanId], references: [id])
   canceledByChallan Challan? @relation("ChallanCancellation")
+
+  @@index([studentId])
 }
 
 model ChallanItem {
@@ -468,6 +489,7 @@ model ChallanPayment {
   challanId     String
   challan       Challan       @relation(fields: [challanId], references: [id], onDelete: Cascade)
   schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   createdAt     DateTime      @default(now())
 }
 
@@ -477,6 +499,7 @@ model AccountSubHead {
   headId    String?
   head      AccountHead? @relation("AccountHeadSubheads", fields: [headId], references: [id], onDelete: Cascade)
   schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   feeHeads  FeeHead[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -491,7 +514,8 @@ model FeeStructure {
   feeHead     FeeHead  @relation(fields: [feeHeadId], references: [id], onDelete: Cascade)
   classId     String
   myClass     Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
-  schoolId    String   
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -506,6 +530,7 @@ model Discount {
   feeHeadId   String
   feeHead     FeeHead      @relation(fields: [feeHeadId], references: [id], onDelete: Cascade)
   schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   allocations StudentDiscount[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -537,8 +562,12 @@ model Invoice {
   items         InvoiceItem[]
   payments      Payment[]     // Relation to Payments
   schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([schoolId, status])
+  @@index([studentId, month, year])
 }
 
 model InvoiceItem {
@@ -562,7 +591,16 @@ model Payment {
   invoiceId     String
   invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   schoolId      String
+  school        School        @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   createdAt     DateTime      @default(now())
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
 }
 
 
@@ -610,6 +648,7 @@ model Exam {
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
   
   schoolId       String
+  school         School   @relation(fields: [schoolId], references: [id], onDelete: Restrict)
   
   configurations ExamConfiguration[]
   results        ExamResult[]
@@ -777,4 +816,6 @@ model SubjectAssignment {
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+
+  @@unique([teacherId, subjectId, classId, sectionId])
 }

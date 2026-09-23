@@ -35,6 +35,9 @@ export async function GET(request: NextRequest) {
         { status: 404 }
       );
     }
+    if (session.user.role !== 'SUPER_ADMIN' && exam.schoolId !== session.user.schoolId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get class details
     const classDetails = await prisma.class.findUnique({

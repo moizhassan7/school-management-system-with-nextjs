@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { requirePermission } from '@/lib/authz';
+import { forbidOrMissing, schoolIdForSubjectGroup } from '@/lib/tenant';
 
 const subjectSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -12,7 +14,11 @@ export async function GET(
   { params }: { params: Promise<{ subjectGroupId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+    if (error || !session) return error;
     const { subjectGroupId } = await params;
+    const denied = forbidOrMissing(session, await schoolIdForSubjectGroup(subjectGroupId));
+    if (denied) return denied;
     const subjects = await prisma.subject.findMany({
       where: { subjectGroupId },
       orderBy: { name: 'asc' },
@@ -28,7 +34,11 @@ export async function POST(
   { params }: { params: Promise<{ subjectGroupId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('CONFIGURATION', 'CREATE');
+    if (error || !session) return error;
     const { subjectGroupId } = await params;
+    const denied = forbidOrMissing(session, await schoolIdForSubjectGroup(subjectGroupId));
+    if (denied) return denied;
     const body = await request.json();
     const validated = subjectSchema.parse(body);
 

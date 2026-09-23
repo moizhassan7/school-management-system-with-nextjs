@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { can } from '@/lib/permissions';
+import { stripSecrets } from '@/lib/authz';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ staffId: string }> }) {
   try {
@@ -30,11 +32,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ staffId: string }> }) {
   try {
     const session = await auth();
-    if (!session?.user?.schoolId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (!can(session.user, 'TEACHERS', 'EDIT')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const { staffId } = await params;
+    const existingStaff = await prisma.staffRecord.findFirst({
+      where: {
+        userId: staffId,
+        ...(session.user.role === 'SUPER_ADMIN' ? {} : { user: { schoolId: session.user.schoolId || '__none__' } }),
+      },
+      select: { id: true, userId: true },
+    });
+    if (!existingStaff) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
     const body = await request.json();
+    if (body.role === 'ADMIN' && !['ADMIN', 'SUPER_ADMIN'].includes(String(session.user.role))) {
+      return NextResponse.json({ error: 'Cannot assign ADMIN' }, { status: 403 });
+    }
+    if (body.role === 'SUPER_ADMIN' && session.user.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Cannot assign SUPER_ADMIN' }, { status: 403 });
+    }
 
     const assignments = Array.isArray(body.assignments) ? body.assignments : [];
     if (assignments.length > 0) {
@@ -73,7 +93,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           salary: body.salary,
           employmentType: body.employmentType
         },
-        include: { user: true }
+        include: { user: { select: { id: true, name: true, email: true, phone: true, role: true } } }
       });
 
       await tx.user.update({
@@ -113,7 +133,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return staff;
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json(stripSecrets(updated));
   } catch (error: any) {
     if (error?.code === 'P2002') {
       return NextResponse.json({ error: 'Email already exists' }, { status: 400 });

@@ -30,9 +30,10 @@ export function isValidFileSize(size: number): boolean {
  * Generates a unique filename with the original extension
  */
 export function generateUniqueFilename(originalName: string): string {
-    const extension = originalName.split('.').pop();
+    const raw = originalName.split('.').pop()?.toLowerCase() || 'bin';
+    const extension = ['jpg', 'jpeg', 'png', 'webp'].includes(raw) ? raw : 'bin';
     const randomName = randomBytes(16).toString('hex');
-    return `${randomName}.${extension}`;
+    return `${randomName}.${extension === 'jpeg' ? 'jpg' : extension}`;
 }
 
 /**

@@ -14,15 +14,16 @@ export default function ParentDetailPage({ params }: { params: Promise<{ parentI
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // We can reuse the same API and filter client side, or build a specific one.
-        // For simplicity/speed, we reuse the bulk endpoint but in prod you might want a single fetch ID endpoint.
-        fetch('/api/parents/financial-overview')
-            .then(res => res.json())
-            .then(data => {
-                const found = data.find((p: any) => p.id === parentId);
-                setParent(found);
-                setLoading(false);
-            });
+        fetch(`/api/parents/financial-overview?parentId=${encodeURIComponent(parentId)}`)
+            .then((res) => {
+                if (!res.ok) throw new Error('Not found');
+                return res.json();
+            })
+            .then((data) => {
+                setParent(data?.id ? data : null);
+            })
+            .catch(() => setParent(null))
+            .finally(() => setLoading(false));
     }, [parentId]);
 
     if (loading) return <div className="p-10">Loading...</div>;
@@ -52,7 +53,7 @@ export default function ParentDetailPage({ params }: { params: Promise<{ parentI
                 <div className="text-right">
                     <p className="text-sm text-slate-500">Total Family Dues</p>
                     <p className={`text-3xl font-bold ${parent.totalFamilyDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        ${parent.totalFamilyDue.toLocaleString()}
+                        Rs. {(parent.totalFamilyDue ?? 0).toLocaleString()}
                     </p>
                     <div className="mt-4">
         <Link href={`/parents/${parentId}/collect`}>
@@ -90,17 +91,17 @@ export default function ParentDetailPage({ params }: { params: Promise<{ parentI
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-600">Invoice Dues</span>
-                                    <span className="font-medium">${child.invoiceDue.toLocaleString()}</span>
+                                    <span className="font-medium">Rs. {child.invoiceDue.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-600">Challan Dues</span>
-                                    <span className="font-medium">${child.challanDue.toLocaleString()}</span>
+                                    <span className="font-medium">Rs. {child.challanDue.toLocaleString()}</span>
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between items-center pt-1">
                                     <span className="font-bold">Total Payable</span>
                                     <span className={`font-bold ${child.totalDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                        ${child.totalDue.toLocaleString()}
+                                        Rs. {child.totalDue.toLocaleString()}
                                     </span>
                                 </div>
                             </div>

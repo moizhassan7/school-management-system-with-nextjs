@@ -128,7 +128,7 @@ export default function StudentForm() {
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
         defaultValues: {
-            name: '', email: '', password: 'Student@123', gender: 'MALE', phone: '', address: '', religion: '',
+            name: '', email: '', password: '', gender: 'MALE', phone: '', address: '', religion: '',
             schoolId: '', campusId: '', classGroupId: '', classId: '', sectionId: '', subjectGroupId: '',
             admissionNumber: '', rollNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
             startYear: new Date().getFullYear().toString(),
@@ -334,7 +334,7 @@ export default function StudentForm() {
             const payload = {
                 name: data.name, 
                 email: studentEmail, 
-                password: data.password?.trim() ? data.password.trim() : 'Student@123', 
+                password: data.password?.trim() || '', 
                 schoolId: data.schoolId,
                 gender: data.gender, phone: data.phone, address: data.address, religion: data.religion || undefined,
                 student: {
@@ -422,7 +422,7 @@ export default function StudentForm() {
                         body: JSON.stringify({
                             name: parent.name,
                             email: parent.email.trim() || generatedEmail,
-                            password: 'password123',
+                            password: crypto.randomUUID().replace(/-/g, '').slice(0, 12),
                             phone: parent.phone,
                             address: data.address,
                             schoolId: data.schoolId,
@@ -465,9 +465,13 @@ export default function StudentForm() {
                     <Button variant="outline" onClick={() => router.back()} className="bg-white dark:bg-slate-800 border-slate-200 text-slate-700">
                         Cancel
                     </Button>
-                    <Button onClick={form.handleSubmit(onSubmit)} className="bg-primary hover:bg-primary/90 text-white shadow-md shadow-blue-500/20">
+                    <Button
+                        onClick={form.handleSubmit(onSubmit)}
+                        disabled={isSubmitting}
+                        className="bg-primary hover:bg-primary/90 text-white shadow-md shadow-blue-500/20"
+                    >
                         {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                        Submit Admission
+                        {isSubmitting ? 'Submitting…' : 'Submit Admission'}
                     </Button>
                 </div>
             </div>
@@ -610,12 +614,12 @@ export default function StudentForm() {
                                     <FormItem>
                                         <div className="flex items-center justify-between">
                                             <FormLabel className="text-slate-700">Student Password</FormLabel>
-                                            <span className="text-xs text-slate-500 font-normal">Default: Student@123</span>
+                                            <span className="text-xs text-slate-500 font-normal">Leave blank to generate a one-time password</span>
                                         </div>
                                         <FormControl>
                                             <Input 
                                                 type="text" 
-                                                placeholder="Student@123 (Leave blank for default)" 
+                                                placeholder="Leave blank to generate a password" 
                                                 {...field} 
                                                 className="bg-white" 
                                             />
@@ -952,9 +956,14 @@ export default function StudentForm() {
                         <Button type="button" variant="outline" onClick={() => router.back()} className="bg-white border-slate-200">
                             Cancel
                         </Button>
-                        <Button type="button" onClick={form.handleSubmit(onSubmit)} className="bg-primary hover:bg-primary/90 text-white shadow-md">
+                        <Button
+                            type="button"
+                            onClick={form.handleSubmit(onSubmit)}
+                            disabled={isSubmitting}
+                            className="bg-primary hover:bg-primary/90 text-white shadow-md"
+                        >
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
-                            Submit Admission
+                            {isSubmitting ? 'Submitting…' : 'Submit Admission'}
                         </Button>
                     </div>
                 </form>

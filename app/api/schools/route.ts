@@ -15,7 +15,7 @@ const schoolSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -23,12 +23,59 @@ export async function GET() {
     }
     if (
       !can(session.user, 'CONFIGURATION', 'VIEW') &&
-      !can(session.user, 'USERS', 'VIEW')
+      !can(session.user, 'USERS', 'VIEW') &&
+      !can(session.user, 'DASHBOARD', 'VIEW')
     ) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const view = new URL(request.url).searchParams.get('view');
+    const schoolWhere =
+      session.user.role === 'SUPER_ADMIN' ? {} : { id: session.user.schoolId || '__none__' };
+
+    if (view === 'nav') {
+      const schools = await prisma.school.findMany({
+        where: schoolWhere,
+        select: {
+          id: true,
+          name: true,
+          initials: true,
+          campuses: {
+            select: {
+              id: true,
+              name: true,
+              classGroups: {
+                select: {
+                  id: true,
+                  name: true,
+                  campusId: true,
+                  classes: {
+                    select: { id: true, name: true },
+                    orderBy: { name: 'asc' },
+                  },
+                },
+                orderBy: { name: 'asc' },
+              },
+            },
+            orderBy: { name: 'asc' },
+          },
+        },
+        orderBy: { name: 'asc' },
+      });
+      const filtered = schools.map((school) => ({
+        ...school,
+        campuses: school.campuses.filter(
+          (campus) =>
+            session.user.role === 'SUPER_ADMIN' ||
+            !session.user.campusIds?.length ||
+            hasCampusAccess(session.user, campus.id)
+        ),
+      }));
+      return NextResponse.json(filtered);
+    }
+
     const schools = await prisma.school.findMany({
+      where: schoolWhere,
       include: {
         campuses: {
           select: {

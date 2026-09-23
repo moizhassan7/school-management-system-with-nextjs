@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
 
 const assignSchema = z.object({
   discountId: z.string().min(1, "Discount ID is required"),
@@ -12,7 +13,18 @@ export async function GET(
   { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('FEES', 'VIEW');
+    if (error || !session) return error;
+
     const { studentId } = await params;
+    const student = await prisma.user.findUnique({
+      where: { id: studentId },
+      select: { schoolId: true },
+    });
+    if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+    const denied = assertSameSchool(session, student.schoolId);
+    if (denied) return denied;
+
     const assignments = await prisma.studentDiscount.findMany({
       where: { studentId },
       include: { 
@@ -33,7 +45,18 @@ export async function POST(
   { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('FEES', 'CREATE');
+    if (error || !session) return error;
+
     const { studentId } = await params;
+    const student = await prisma.user.findUnique({
+      where: { id: studentId },
+      select: { schoolId: true },
+    });
+    if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+    const denied = assertSameSchool(session, student.schoolId);
+    if (denied) return denied;
+
     const body = await request.json();
     const { discountId } = assignSchema.parse(body);
 
@@ -66,13 +89,25 @@ export async function DELETE(
   { params }: { params: Promise<{ studentId: string }> }
 ) {
   try {
+    const { session, error } = await requirePermission('FEES', 'DELETE');
+    if (error || !session) return error;
+
+    const { studentId } = await params;
     const { searchParams } = new URL(request.url);
     const assignmentId = searchParams.get('id');
 
     if (!assignmentId) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
+    const assignment = await prisma.studentDiscount.findFirst({
+      where: { id: assignmentId, studentId },
+      include: { student: { select: { schoolId: true } } },
+    });
+    if (!assignment) return NextResponse.json({ error: 'Discount assignment not found' }, { status: 404 });
+    const denied = assertSameSchool(session, assignment.student.schoolId);
+    if (denied) return denied;
+
     await prisma.studentDiscount.delete({
-      where: { id: assignmentId }
+      where: { id: assignment.id }
     });
 
     return NextResponse.json({ success: true });

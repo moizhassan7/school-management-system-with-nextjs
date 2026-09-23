@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import crypto from 'crypto';
 import { Role } from '@prisma/client';
 import { auth } from '@/auth';
 import { can, permissionKey } from '@/lib/permissions';
 import { generateAdmissionNumber } from '@/lib/admission-number';
+import { stripSecrets } from '@/lib/authz';
+import { generateTemporaryPassword, hashPassword } from '@/lib/password';
 
 const studentSchema = z.object({
   // Ignored when creating — server always auto-generates
@@ -57,7 +58,7 @@ const userSchema = z.object({
   student: studentSchema.optional(),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -67,24 +68,52 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, Number(searchParams.get('page') || 1));
+    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 25)));
+    const q = searchParams.get('q')?.trim() || '';
+
     const role = session.user.role;
     const schoolId = session.user.schoolId;
-    const where =
+    const where: Record<string, unknown> =
       role === 'SUPER_ADMIN' ? { deletedAt: null } : { deletedAt: null, schoolId };
 
-    const users = await prisma.user.findMany({
-      where,
-      include: {
-        school: { select: { id: true, name: true, initials: true } },
-        campusAccess: {
-          include: { campus: { select: { id: true, name: true } } },
-        },
-        _count: { select: { userPermissions: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    if (q) {
+      const roleMatch = Object.values(Role).find((r) => r === q.toUpperCase());
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { username: { contains: q, mode: 'insensitive' } },
+        ...(roleMatch ? [{ role: { equals: roleMatch } }] : []),
+      ];
+    }
 
-    return NextResponse.json(users);
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        include: {
+          school: { select: { id: true, name: true, initials: true } },
+          campusAccess: {
+            include: { campus: { select: { id: true, name: true } } },
+          },
+          _count: { select: { userPermissions: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return NextResponse.json(
+      stripSecrets({
+        data: users,
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      })
+    );
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
@@ -128,12 +157,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cannot create SUPER_ADMIN' }, { status: 403 });
     }
 
+    if (role === Role.ADMIN && !['ADMIN', 'SUPER_ADMIN'].includes(String(session.user.role))) {
+      return NextResponse.json({ error: 'Cannot create ADMIN' }, { status: 403 });
+    }
+
+    let temporaryPassword: string | undefined;
     const rawPassword = data.password?.trim()
       ? data.password.trim()
-      : creatingStudent
-      ? 'Student@123'
-      : 'password123';
-    const passwordHash = crypto.createHash('sha256').update(rawPassword).digest('hex');
+      : (temporaryPassword = generateTemporaryPassword());
+    const passwordHash = await hashPassword(rawPassword);
 
     let userEmail = data.email?.trim();
     if (!userEmail) {
@@ -252,6 +284,7 @@ export async function POST(request: Request) {
             admissionDate: new Date(s.admissionDate),
             classId: s.classId,
             sectionId: s.sectionId || null,
+            schoolId: effectiveSchoolId,
           },
         });
 
@@ -290,7 +323,10 @@ export async function POST(request: Request) {
       return { ...created, studentRecord };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(
+      stripSecrets({ ...result, temporaryPassword }),
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof Error && error.message === 'CLASS_REQUIRED') {
       return NextResponse.json(

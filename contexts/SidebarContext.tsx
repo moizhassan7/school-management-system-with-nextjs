@@ -44,7 +44,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(true);
         try {
             // Because we updated the API, this single call gets the whole tree
-            const response = await fetch('/api/schools');
+            const response = await fetch('/api/schools?view=nav');
             if (response.ok) {
                 const data = await response.json();
                 setSchools(data);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { requirePermission, assertSameSchool } from '@/lib/authz';
 
 const campusSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -15,7 +16,11 @@ export async function GET(
     { params }: { params: Promise<{ schoolId: string; campusId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'VIEW');
+        if (error || !session) return error;
         const { schoolId, campusId } = await params;
+        const denied = assertSameSchool(session, schoolId);
+        if (denied) return denied;
 
         const campus = await prisma.campus.findFirst({
             where: {
@@ -46,7 +51,11 @@ export async function PUT(
     { params }: { params: Promise<{ schoolId: string; campusId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'EDIT');
+        if (error || !session) return error;
         const { schoolId, campusId } = await params;
+        const denied = assertSameSchool(session, schoolId);
+        if (denied) return denied;
 
         // Verify campus exists and belongs to school
         const existingCampus = await prisma.campus.findFirst({
@@ -97,7 +106,11 @@ export async function DELETE(
     { params }: { params: Promise<{ schoolId: string; campusId: string }> }
 ) {
     try {
+        const { session, error } = await requirePermission('CONFIGURATION', 'DELETE');
+        if (error || !session) return error;
         const { schoolId, campusId } = await params;
+        const denied = assertSameSchool(session, schoolId);
+        if (denied) return denied;
 
         // Verify campus exists and belongs to school
         const existingCampus = await prisma.campus.findFirst({

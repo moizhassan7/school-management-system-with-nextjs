@@ -3,6 +3,12 @@
 import { AttendanceStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '../prisma';
+
+function utcDayRange(input: Date) {
+  const start = new Date(Date.UTC(input.getFullYear(), input.getMonth(), input.getDate()));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+  return { start, end };
+}
 export async function getTeacherSections(teacherUserId: string) {
   // 1. Find the StaffRecord for this User
   const staff = await prisma.staffRecord.findUnique({
@@ -53,11 +59,7 @@ export async function getAttendanceByDate(sectionId: string, date: Date) {
   // For simplicity, let's assume we want records where the date falls on this day.
   // But our schema has `date DateTime`.
   
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const { start: startOfDay, end: endOfDay } = utcDayRange(date);
 
   const attendance = await prisma.attendance.findMany({
     where: {
@@ -84,8 +86,7 @@ export async function saveAttendance(
   recordedByUserId: string
 ) {
   // Normalize date to ensure consistency (strip time)
-  const date = new Date(inputDate);
-  date.setHours(0, 0, 0, 0);
+  const date = utcDayRange(inputDate).start;
 
   // 1. Get necessary context (School, Class, AcademicYear)
   const section = await prisma.section.findUnique({
@@ -143,5 +144,5 @@ export async function saveAttendance(
     )
   );
 
-  revalidatePath('/dashboard/attendance'); // Adjust path as needed
+  revalidatePath('/attendance');
 }

@@ -35,20 +35,50 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { ListPagination } from '@/components/list-pagination';
+import { EmptyState } from '@/components/empty-state';
+
 export default function InvoicesPage() {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState<string>('ALL');
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const pageSize = 25;
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+        return () => clearTimeout(t);
+    }, [search]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [filterStatus, debouncedSearch]);
+
     const loadInvoices = async () => {
+        setLoading(true);
         try {
-            const res = await fetch('/api/finance/invoices');
-            const data = await res.json();
-            setInvoices(Array.isArray(data) ? data : []);
+            const params = new URLSearchParams({
+                page: String(page),
+                pageSize: String(pageSize),
+            });
+            if (filterStatus !== 'ALL') params.set('status', filterStatus);
+            if (debouncedSearch) params.set('q', debouncedSearch);
+            const res = await fetch(`/api/finance/invoices?${params}`);
+            const payload = await res.json();
+            if (Array.isArray(payload)) {
+                setInvoices(payload);
+                setTotal(payload.length);
+            } else {
+                setInvoices(Array.isArray(payload.data) ? payload.data : []);
+                setTotal(Number(payload.total) || 0);
+            }
         } catch {
             setInvoices([]);
+            setTotal(0);
         } finally {
             setLoading(false);
         }
@@ -56,7 +86,7 @@ export default function InvoicesPage() {
 
     useEffect(() => {
         loadInvoices();
-    }, []);
+    }, [page, filterStatus, debouncedSearch]);
 
     const handleSendInvoice = async (invoiceId: string) => {
         setActionLoadingId(invoiceId);
@@ -126,16 +156,7 @@ export default function InvoicesPage() {
         };
     }, [invoices]);
 
-    const filteredInvoices = invoices.filter((inv) => {
-        const matchesStatus = filterStatus === 'ALL' || inv.status === filterStatus;
-        const q = search.trim().toLowerCase();
-        const matchesSearch =
-            !q ||
-            inv.invoiceNo?.toLowerCase().includes(q) ||
-            inv.student?.name?.toLowerCase().includes(q) ||
-            inv.student?.email?.toLowerCase().includes(q);
-        return matchesStatus && matchesSearch;
-    });
+    const filteredInvoices = invoices;
 
     return (
         <div className="page-content mx-auto w-full max-w-[1600px] space-y-6">
@@ -226,7 +247,9 @@ export default function InvoicesPage() {
                     <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
                         <div>
                             <h3 className="font-heading text-lg font-semibold text-foreground">Invoices</h3>
-                            <p className="text-sm text-muted-foreground">Showing {filteredInvoices.length} records</p>
+                            <p className="text-sm text-muted-foreground">
+                                {total === 0 ? 'No invoices on this page' : `${total} total matching invoices`}
+                            </p>
                         </div>
                     </div>
 
@@ -251,8 +274,18 @@ export default function InvoicesPage() {
                                     </TableRow>
                                 ) : filteredInvoices.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                                            No invoices found
+                                        <TableCell colSpan={6} className="p-0">
+                                            <EmptyState
+                                                className="border-0 py-16"
+                                                title={debouncedSearch || filterStatus !== 'ALL' ? 'No invoices match your filters' : 'No invoices yet'}
+                                                description={
+                                                    debouncedSearch || filterStatus !== 'ALL'
+                                                        ? 'Try clearing search or status filters.'
+                                                        : 'Generate monthly invoices to get started.'
+                                                }
+                                                actionLabel={debouncedSearch || filterStatus !== 'ALL' ? undefined : 'Generate invoices'}
+                                                actionHref={debouncedSearch || filterStatus !== 'ALL' ? undefined : '/finance/invoices/generate'}
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 ) : (
@@ -333,6 +366,15 @@ export default function InvoicesPage() {
                                 )}
                             </TableBody>
                         </Table>
+                    </div>
+                    <div className="px-5 pb-5">
+                        <ListPagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={setPage}
+                            disabled={loading}
+                        />
                     </div>
                 </div>
             </div>

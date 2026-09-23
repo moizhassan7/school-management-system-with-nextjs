@@ -39,6 +39,11 @@ export async function generateAdmissionNumber(
   const code = classCodeFromName(cls.name);
   const prefix = `${year}-${code}-`;
 
+  if ('$executeRaw' in tx) {
+    await (tx as { $executeRaw: (query: TemplateStringsArray, ...values: unknown[]) => Promise<unknown> })
+      .$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${schoolId}:${prefix}`})::bigint)`;
+  }
+
   const existing = await tx.studentRecord.findMany({
     where: {
       admissionNumber: { startsWith: prefix },

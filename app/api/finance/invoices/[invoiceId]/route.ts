@@ -37,7 +37,7 @@ export async function GET(
                 include: {
                   parentRecord: {
                     include: {
-                      user: true,
+                      user: { select: { id: true, name: true, phone: true, email: true } },
                     },
                   },
                 },

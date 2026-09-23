@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission, schoolScope } from '@/lib/authz';
 
 export async function GET(request: Request) {
+  const { session, error } = await requirePermission('STUDENTS', 'VIEW');
+  if (error || !session) return error;
+
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('q');
 
@@ -12,6 +16,7 @@ export async function GET(request: Request) {
   try {
     const parents = await prisma.parentRecord.findMany({
       where: {
+        user: schoolScope(session),
         OR: [
           // FIX: Added Search by Name
           { user: { name: { contains: query, mode: 'insensitive' } } },

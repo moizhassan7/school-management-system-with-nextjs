@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { can } from '@/lib/permissions';
+import { z } from 'zod';
 
 // GET /api/academic-years - Get all academic years for the school
 export async function GET(request: NextRequest) {
@@ -36,8 +38,14 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.schoolId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (!can(session.user, 'CONFIGURATION', 'CREATE')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    const body = await request.json();
+    const body = z.object({
+      startYear: z.string().min(4),
+      stopYear: z.string().min(4),
+    }).parse(await request.json());
     const { startYear, stopYear } = body;
 
     if (!startYear || !stopYear) {

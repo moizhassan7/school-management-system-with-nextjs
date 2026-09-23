@@ -1,11 +1,12 @@
-import { PrismaClient } from '@prisma/client';    
+import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 export const prisma =
-    globalForPrisma.prisma ||
-    new PrismaClient({
-        log: ['query'],
-    });
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Reuse one client in every environment so serverless warm starts do not open a new pool.
+globalForPrisma.prisma = prisma;

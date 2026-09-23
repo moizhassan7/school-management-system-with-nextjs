@@ -1,47 +1,64 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Users, Search, ChevronRight, Baby, Phone, CreditCard, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ListPagination } from '@/components/list-pagination';
+import { EmptyState } from '@/components/empty-state';
 
 export default function ParentsPage() {
   const [parents, setParents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalOutstanding, setTotalOutstanding] = useState(0);
+  const pageSize = 25;
 
   useEffect(() => {
-    fetch('/api/parents/financial-overview')
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (debouncedSearch) params.set('q', debouncedSearch);
+
+    fetch(`/api/parents/financial-overview?${params}`)
       .then((res) => res.json())
-      .then((data) => {
-        setParents(Array.isArray(data) ? data : []);
-        setLoading(false);
+      .then((payload) => {
+        if (Array.isArray(payload)) {
+          setParents(payload);
+          setTotal(payload.length);
+          setTotalOutstanding(
+            payload.reduce((sum: number, p: any) => sum + (Number(p.totalFamilyDue) || 0), 0)
+          );
+        } else {
+          setParents(Array.isArray(payload.data) ? payload.data : []);
+          setTotal(Number(payload.total) || 0);
+          setTotalOutstanding(Number(payload.totalOutstanding) || 0);
+        }
       })
       .catch(() => {
         setParents([]);
-        setLoading(false);
-      });
-  }, []);
-
-  const filteredParents = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return parents;
-    return parents.filter(
-      (p) =>
-        p.name?.toLowerCase().includes(q) ||
-        p.phone?.includes(searchQuery) ||
-        p.email?.toLowerCase().includes(q) ||
-        p.cnic?.includes(searchQuery)
-    );
-  }, [parents, searchQuery]);
-
-  const totalOutstanding = useMemo(
-    () => parents.reduce((sum, p) => sum + (Number(p.totalFamilyDue) || 0), 0),
-    [parents]
-  );
+        setTotal(0);
+        setTotalOutstanding(0);
+      })
+      .finally(() => setLoading(false));
+  }, [page, debouncedSearch]);
 
   return (
     <div className="page-content mx-auto w-full max-w-[1600px] space-y-6">
@@ -56,12 +73,12 @@ export default function ParentsPage() {
           <p className="mt-1 text-muted-foreground">Manage parents, kinship, and family accounts.</p>
         </div>
         <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search name, phone, CNIC..."
             className="rounded-xl bg-muted/50 pl-9"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
       </div>
@@ -72,7 +89,7 @@ export default function ParentsPage() {
           <div>
             <p className="text-sm text-teal-100">Total Parents</p>
             <h3 className="mt-1 font-heading text-3xl font-bold text-white">
-              {loading ? '—' : parents.length}
+              {loading ? '—' : total}
             </h3>
           </div>
         </div>
@@ -91,7 +108,7 @@ export default function ParentsPage() {
         <div className="border-b border-border/70 px-5 py-4">
           <h2 className="font-heading text-lg font-semibold text-foreground">Parents</h2>
           <p className="text-sm text-muted-foreground">
-            {loading ? 'Loading...' : `Showing ${filteredParents.length} of ${parents.length} records`}
+            {loading ? 'Loading...' : `${total} matching record${total === 1 ? '' : 's'}`}
           </p>
         </div>
 
@@ -113,16 +130,22 @@ export default function ParentsPage() {
                     <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                   </TableCell>
                 </TableRow>
-              ) : filteredParents.length === 0 ? (
+              ) : parents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                    {parents.length === 0
-                      ? 'No parents found.'
-                      : 'No parents match your search.'}
+                  <TableCell colSpan={5} className="p-0">
+                    <EmptyState
+                      className="border-0"
+                      title={debouncedSearch ? 'No parents match your search' : 'No parents found'}
+                      description={
+                        debouncedSearch
+                          ? 'Try a different name, phone, or CNIC.'
+                          : 'Parents appear here after they are linked to students.'
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredParents.map((parent) => (
+                parents.map((parent) => (
                   <TableRow key={parent.id}>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
@@ -146,7 +169,8 @@ export default function ParentsPage() {
                     <TableCell>
                       {(parent.totalFamilyDue ?? 0) > 0 ? (
                         <Badge variant="destructive" className="flex w-fit items-center gap-1 rounded-lg">
-                          <CreditCard className="h-3 w-3" /> Rs. {(parent.totalFamilyDue ?? 0).toLocaleString()}
+                          <CreditCard className="h-3 w-3" /> Rs.{' '}
+                          {(parent.totalFamilyDue ?? 0).toLocaleString()}
                         </Badge>
                       ) : (
                         <Badge
@@ -169,6 +193,16 @@ export default function ParentsPage() {
               )}
             </TableBody>
           </Table>
+        </div>
+
+        <div className="px-5 pb-4">
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            disabled={loading}
+          />
         </div>
       </div>
     </div>
