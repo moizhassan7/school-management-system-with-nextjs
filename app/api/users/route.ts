@@ -34,9 +34,9 @@ const studentSchema = z.object({
 
 const userSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.string().email().optional().or(z.literal('')),
   username: z.string().min(3).optional().nullable().or(z.literal('')),
-  password: z.string().min(6),
+  password: z.string().min(6).optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
   religion: z.string().optional().or(z.literal('')),
@@ -128,13 +128,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cannot create SUPER_ADMIN' }, { status: 403 });
     }
 
-    const passwordHash = crypto.createHash('sha256').update(data.password).digest('hex');
+    const rawPassword = data.password?.trim()
+      ? data.password.trim()
+      : creatingStudent
+      ? 'Student@123'
+      : 'password123';
+    const passwordHash = crypto.createHash('sha256').update(rawPassword).digest('hex');
+
+    let userEmail = data.email?.trim();
+    if (!userEmail) {
+      const school = await prisma.school.findUnique({
+        where: { id: effectiveSchoolId },
+        select: { name: true },
+      });
+      const domain = school?.name
+        ? `${school.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`
+        : 'theharvardschools.com';
+      const nameSlug =
+        data.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, '.')
+          .replace(/^\.+|\.+$/g, '') || 'student';
+      userEmail = `${nameSlug}@${domain}`;
+      const existing = await prisma.user.findUnique({ where: { email: userEmail } });
+      if (existing) {
+        userEmail = `${nameSlug}.${Date.now().toString().slice(-4)}@${domain}`;
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
           name: data.name,
-          email: data.email,
+          email: userEmail,
           username: data.username ? data.username : null,
           passwordHash,
           phone: data.phone || null,

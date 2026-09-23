@@ -142,16 +142,16 @@ function parseSession(session) {
   return { startYear: '2024', stopYear: '2025' };
 }
 
-function slugEmailLocal(name, sid) {
+function slugEmailLocal(name, sid, domain = 'theharvardschools.com') {
   const base = cleanStr(name)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '.')
     .replace(/^\.+|\.+$/g, '')
     .slice(0, 40);
-  return `${base || 'student'}.${sid}@ths.local`;
+  return `${base || 'student'}.${sid}@${domain}`;
 }
 
-function cleanRows(rawRows) {
+function cleanRows(rawRows, domain = 'theharvardschools.com') {
   const cleaned = [];
   const errors = [];
 
@@ -178,7 +178,7 @@ function cleanRows(rawRows) {
     const email =
       emailRaw && emailRaw.includes('@')
         ? emailRaw.toLowerCase()
-        : slugEmailLocal(name, sid || String(cleaned.length + 1));
+        : slugEmailLocal(name, sid || String(cleaned.length + 1), domain);
 
     const fatherName = cleanStr(row.fatherNAme) || 'Guardian';
     const motherName = cleanStr(row.MotherName);
@@ -228,7 +228,7 @@ function cleanRows(rawRows) {
   return { cleaned, errors };
 }
 
-function writeCleanedExcel(cleaned) {
+function writeCleanedExcel(cleaned, domain = 'theharvardschools.com') {
   const exportCols = [
     'sid',
     'name',
@@ -275,7 +275,7 @@ function writeCleanedExcel(cleaned) {
     ['Suspended (Disactive/Leave)', cleaned.filter((r) => r.suspended).length],
     ['Unique classes', [...new Set(cleaned.map((r) => r.class))].join(', ')],
     ['Default password', DEFAULT_PASSWORD],
-    ['Email domain', '@ths.local'],
+    ['Email domain', `@${domain}`],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Summary');
 
@@ -413,7 +413,7 @@ async function ensureClassStructure(cleaned) {
   return classCache;
 }
 
-async function seedStudents(cleaned, classCache, yearMap) {
+async function seedStudents(cleaned, classCache, yearMap, domain = 'theharvardschools.com') {
   const passwordHash = hashPassword(DEFAULT_PASSWORD);
   let created = 0;
   let skipped = 0;
@@ -526,7 +526,7 @@ async function seedStudents(cleaned, classCache, yearMap) {
         let parentRecordId = parentCache.get(parentKey);
 
         if (!parentRecordId) {
-          const parentEmail = `parent.${row.sid || i}@ths.local`;
+          const parentEmail = `parent.${row.sid || i}@${domain}`;
           const existingParentUser = await tx.user.findUnique({
             where: { email: parentEmail },
             include: { parentRecord: true },
@@ -596,22 +596,6 @@ async function main() {
     throw new Error(`Source file not found: ${SOURCE}`);
   }
 
-  console.log('📖 Reading Excel...');
-  const wb = XLSX.readFile(SOURCE);
-  const rawRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-    defval: '',
-    raw: false,
-  });
-  console.log(`   Raw rows: ${rawRows.length}`);
-
-  const { cleaned, errors } = cleanRows(rawRows);
-  console.log(`🧹 Cleaned: ${cleaned.length} | Dropped: ${errors.length}`);
-  if (errors.length) {
-    console.log('   Sample drops:', errors.slice(0, 5));
-  }
-
-  writeCleanedExcel(cleaned);
-
   const school = await prisma.school.findUnique({ where: { id: SCHOOL_ID } });
   if (!school) {
     throw new Error(`School ${SCHOOL_ID} not found. Run base seed first.`);
@@ -621,13 +605,33 @@ async function main() {
     throw new Error(`Campus ${CAMPUS_ID} not found.`);
   }
 
-  console.log(`🏫 Target: ${school.name} / ${campus.name}`);
+  const schoolDomain = school.name
+    ? `${school.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`
+    : 'theharvardschools.com';
+
+  console.log(`🏫 Target: ${school.name} / ${campus.name} (Domain: @${schoolDomain})`);
+
+  console.log('📖 Reading Excel...');
+  const wb = XLSX.readFile(SOURCE);
+  const rawRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+    defval: '',
+    raw: false,
+  });
+  console.log(`   Raw rows: ${rawRows.length}`);
+
+  const { cleaned, errors } = cleanRows(rawRows, schoolDomain);
+  console.log(`🧹 Cleaned: ${cleaned.length} | Dropped: ${errors.length}`);
+  if (errors.length) {
+    console.log('   Sample drops:', errors.slice(0, 5));
+  }
+
+  writeCleanedExcel(cleaned, schoolDomain);
 
   const yearMap = await ensureAcademicYears(cleaned);
   const classCache = await ensureClassStructure(cleaned);
 
   console.log('🌱 Seeding students...');
-  const result = await seedStudents(cleaned, classCache, yearMap);
+  const result = await seedStudents(cleaned, classCache, yearMap, schoolDomain);
 
   console.log('\n======= DONE =======');
   console.log(`Created students : ${result.created}`);

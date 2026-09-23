@@ -37,8 +37,8 @@ import { Switch } from '@/components/ui/switch';
 // --- Validation Schema ---
 const studentFormSchema = z.object({
     name: z.string().min(1, 'Full name is required'),
-    email: z.string().email('Invalid email address'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
+    email: z.string().email('Invalid email address').optional().or(z.literal('')),
+    password: z.string().min(6, 'Password must be at least 6 characters').optional().or(z.literal('')),
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'UNSPECIFIED']),
     phone: z.string().optional(),
     address: z.string().optional(),
@@ -123,10 +123,12 @@ export default function StudentForm() {
         },
     ]);
 
+    const [isEmailManuallyEdited, setIsEmailManuallyEdited] = useState(false);
+
     const form = useForm<FormValues>({
         resolver: zodResolver(studentFormSchema),
         defaultValues: {
-            name: '', email: '', password: '', gender: 'MALE', phone: '', address: '', religion: '',
+            name: '', email: '', password: 'Student@123', gender: 'MALE', phone: '', address: '', religion: '',
             schoolId: '', campusId: '', classGroupId: '', classId: '', sectionId: '', subjectGroupId: '',
             admissionNumber: '', rollNumber: '', admissionDate: format(new Date(), 'yyyy-MM-dd'),
             startYear: new Date().getFullYear().toString(),
@@ -156,6 +158,34 @@ export default function StudentForm() {
     const selectedCampus = form.watch('campusId');
     const selectedGroup = form.watch('classGroupId');
     const selectedClass = form.watch('classId');
+    const watchedName = form.watch('name');
+
+    const getSchoolDomain = (schoolId?: string) => {
+        const school = schools.find((s) => s.id === schoolId);
+        if (school?.name) {
+            const clean = school.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (clean) return `${clean}.com`;
+        }
+        return 'theharvardschools.com';
+    };
+
+    const formatStudentEmail = (nameStr: string, schoolId?: string) => {
+        const slug = (nameStr || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '.')
+            .replace(/^\.+|\.+$/g, '');
+        if (!slug) return '';
+        const domain = getSchoolDomain(schoolId);
+        return `${slug}@${domain}`;
+    };
+
+    useEffect(() => {
+        if (!isEmailManuallyEdited && watchedName) {
+            const autoEmail = formatStudentEmail(watchedName, selectedSchool);
+            form.setValue('email', autoEmail, { shouldValidate: false });
+        }
+    }, [watchedName, selectedSchool, isEmailManuallyEdited, schools]);
 
     useEffect(() => {
         if (!selectedSchool) { setAvailableCampuses([]); return; }
@@ -296,9 +326,16 @@ export default function StudentForm() {
         setIsSubmitting(true);
         form.clearErrors('email');
         try {
-            // ... (Keep existing payload construction & API calls) ...
+            const studentEmail =
+                data.email?.trim() ||
+                formatStudentEmail(data.name, data.schoolId) ||
+                `student.${Date.now()}@theharvardschools.com`;
+
             const payload = {
-                name: data.name, email: data.email, password: data.password, schoolId: data.schoolId,
+                name: data.name, 
+                email: studentEmail, 
+                password: data.password?.trim() ? data.password.trim() : 'Student@123', 
+                schoolId: data.schoolId,
                 gender: data.gender, phone: data.phone, address: data.address, religion: data.religion || undefined,
                 student: {
                     rollNumber: data.rollNumber || undefined,
@@ -372,8 +409,8 @@ export default function StudentForm() {
                 });
 
                 const father = toCreate.find((parent) => parent.relationship === 'FATHER');
-                if (!father?.name.trim() || !father?.phone.trim() || !father?.cnic.trim()) {
-                    throw new Error('Father name, phone and CNIC are required');
+                if (!father?.name.trim() || !father?.phone.trim()) {
+                    throw new Error('Father name and phone are required');
                 }
 
                 for (let i = 0; i < toCreate.length; i += 1) {
@@ -512,8 +549,22 @@ export default function StudentForm() {
 
                                 <FormField control={form.control} name="email" render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-slate-700">Email Address</FormLabel>
-                                        <FormControl><Input type="email" {...field} className="bg-white" /></FormControl>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel className="text-slate-700">Email Address</FormLabel>
+                                            <span className="text-xs text-slate-500 font-normal">Auto-generated</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input 
+                                                type="email" 
+                                                placeholder="studentname@school.com" 
+                                                {...field} 
+                                                onChange={(e) => {
+                                                    setIsEmailManuallyEdited(true);
+                                                    field.onChange(e);
+                                                }}
+                                                className="bg-white" 
+                                            />
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
@@ -557,8 +608,18 @@ export default function StudentForm() {
                                 
                                 <FormField control={form.control} name="password" render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel className="text-slate-700">Student Password</FormLabel>
-                                        <FormControl><Input type="password" {...field} className="bg-white" /></FormControl>
+                                        <div className="flex items-center justify-between">
+                                            <FormLabel className="text-slate-700">Student Password</FormLabel>
+                                            <span className="text-xs text-slate-500 font-normal">Default: Student@123</span>
+                                        </div>
+                                        <FormControl>
+                                            <Input 
+                                                type="text" 
+                                                placeholder="Student@123 (Leave blank for default)" 
+                                                {...field} 
+                                                className="bg-white" 
+                                            />
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )} />
@@ -786,7 +847,7 @@ export default function StudentForm() {
                                 {form.watch('parentMode') === 'CREATE' && (
                                     <div className="md:col-span-2 space-y-4">
                                         <div className="flex items-center justify-between">
-                                            <p className="text-sm text-slate-600">Father is required. Mother and Guardian are optional.</p>
+                                            <p className="text-sm text-slate-600">Father name &amp; phone are required (CNIC optional). Mother and Guardian are optional.</p>
                                             <div className="flex gap-2">
                                                 <Button
                                                     type="button"
@@ -838,11 +899,11 @@ export default function StudentForm() {
                                                         </FormControl>
                                                     </FormItem>
                                                     <FormItem>
-                                                        <FormLabel className="text-slate-700">CNIC {parent.required ? '*' : ''}</FormLabel>
+                                                        <FormLabel className="text-slate-700">CNIC <span className="text-xs text-muted-foreground font-normal">(Optional)</span></FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 className="bg-white"
-                                                                placeholder="XXXXX-XXXXXXX-X"
+                                                                placeholder="XXXXX-XXXXXXX-X (Optional)"
                                                                 value={parent.cnic}
                                                                 onChange={(event) => updateParentContact(parent.relationship, 'cnic', event.target.value)}
                                                             />
