@@ -38,10 +38,11 @@ export async function schoolIdForSubject(subjectId: string) {
   const row = await prisma.subject.findUnique({
     where: { id: subjectId },
     select: {
+      schoolId: true,
       subjectGroup: { select: { classGroup: { select: { campus: { select: { schoolId: true } } } } } },
     },
   });
-  return row?.subjectGroup.classGroup.campus.schoolId ?? null;
+  return row?.schoolId ?? row?.subjectGroup?.classGroup.campus.schoolId ?? null;
 }
 
 export async function schoolIdForSection(sectionId: string) {

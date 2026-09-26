@@ -165,11 +165,18 @@ export default function InvoicesPage() {
                     <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground">Invoices & Payments</h1>
                     <p className="mt-1 text-muted-foreground">Manage student fee invoices and track payment status.</p>
                 </div>
-                <Link href="/finance/invoices/generate">
-                    <Button className="cursor-pointer gap-2 font-semibold shadow-md shadow-primary/20">
-                        <Plus className="h-4 w-4" /> Generate Invoice
-                    </Button>
-                </Link>
+                <div className="flex flex-wrap gap-2">
+                    <Link href="/finance/invoices/custom">
+                        <Button variant="outline" className="cursor-pointer gap-2 font-semibold">
+                            <FileText className="h-4 w-4" /> Custom Challan
+                        </Button>
+                    </Link>
+                    <Link href="/finance/invoices/generate">
+                        <Button className="cursor-pointer gap-2 font-semibold shadow-md shadow-primary/20">
+                            <Plus className="h-4 w-4" /> Generate Invoice
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="bento-grid">

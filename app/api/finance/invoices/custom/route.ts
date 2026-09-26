@@ -16,7 +16,6 @@ const customInvoiceSchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
   dueDate: z.string().min(1),
   items: z.array(itemSchema).min(1),
-  cancelInvoiceNo: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -47,77 +46,66 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Student does not belong to this school' }, { status: 403 });
     }
 
+    const requestedItems = data.items.filter((item) => Number(item.amount) > 0);
+    if (requestedItems.length === 0) {
+      return NextResponse.json({ error: 'Add at least one charge with an amount' }, { status: 400 });
+    }
+
     const invoice = await prisma.$transaction(async (tx) => {
-      if (data.cancelInvoiceNo) {
-        const prevInvoice = await tx.invoice.findUnique({
-          where: { invoiceNo: data.cancelInvoiceNo },
-        });
-        if (prevInvoice) {
-          if (prevInvoice.studentId !== data.studentId || prevInvoice.schoolId !== schoolId) {
-            throw Object.assign(new Error('Invoice to cancel does not belong to this student'), {
-              status: 400,
-            });
-          }
-          await tx.invoice.update({
-            where: { id: prevInvoice.id },
-            data: { status: 'CANCELLED' },
-          });
-        }
+      const heads = await tx.feeHead.findMany({
+        where: { id: { in: requestedItems.map((item) => item.feeHeadId) }, schoolId },
+        select: { id: true },
+      });
+      const knownHeads = new Set(heads.map((head) => head.id));
+      if (requestedItems.some((item) => !knownHeads.has(item.feeHeadId))) {
+        throw Object.assign(new Error('One of the charges does not belong to this school'), { status: 400 });
       }
 
-      const existingSamePeriod = await tx.invoice.findFirst({
+      const openInvoice = await tx.invoice.findFirst({
         where: {
           studentId: data.studentId,
+          schoolId,
           month: data.month,
           year: data.year,
           status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
         },
-        select: { invoiceNo: true },
+        orderBy: { createdAt: 'desc' },
+        include: { items: { select: { feeHeadId: true } } },
       });
 
-      if (existingSamePeriod && !data.cancelInvoiceNo) {
-        throw Object.assign(
-          new Error(
-            'This student already has an unpaid challan for the selected month. Cancel previous challan by barcode or clear dues first.'
-          ),
-          { status: 409, invoiceNo: existingSamePeriod.invoiceNo }
-        );
-      }
+      if (openInvoice) {
+        const alreadyOnChallan = new Set(openInvoice.items.map((item) => item.feeHeadId));
+        const toAdd = requestedItems.filter((item) => !alreadyOnChallan.has(item.feeHeadId));
+        if (toAdd.length === 0) {
+          throw Object.assign(
+            new Error('These charges are already on the open challan for this month.'),
+            { status: 409 }
+          );
+        }
 
-      const finalItems = [...data.items];
-      const pendingInvoices = await tx.invoice.findMany({
-        where: {
-          studentId: data.studentId,
-          status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
-        },
-        select: { totalAmount: true, paidAmount: true },
-      });
-
-      const pendingArrears = pendingInvoices.reduce(
-        (sum, inv) => sum + Math.max(0, Number(inv.totalAmount) - Number(inv.paidAmount || 0)),
-        0
-      );
-
-      if (pendingArrears > 0) {
-        let arrearsHead = await tx.feeHead.findFirst({
-          where: { schoolId, name: { equals: 'Arrears', mode: 'insensitive' } },
+        await tx.invoiceItem.createMany({
+          data: toAdd.map((item) => ({
+            invoiceId: openInvoice.id,
+            feeHeadId: item.feeHeadId,
+            amount: item.amount,
+            originalAmount: item.amount,
+          })),
         });
-        if (!arrearsHead) {
-          arrearsHead = await tx.feeHead.create({
-            data: { schoolId, name: 'Arrears', type: 'ONE_TIME' },
-          });
-        }
-        const alreadyIncluded = finalItems.some((item) => item.feeHeadId === arrearsHead!.id);
-        if (!alreadyIncluded) {
-          finalItems.push({ feeHeadId: arrearsHead.id, amount: pendingArrears });
-        }
+
+        const addedAmount = toAdd.reduce((sum, item) => sum + Number(item.amount), 0);
+        const updated = await tx.invoice.update({
+          where: { id: openInvoice.id },
+          data: { totalAmount: { increment: addedAmount } },
+          include: { items: { include: { feeHead: true } } },
+        });
+        return { ...updated, updatedExisting: true };
       }
 
-      const totalAmount = finalItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const totalAmount = requestedItems.reduce((sum, item) => sum + Number(item.amount), 0);
       const admission = student.studentRecord?.admissionNumber || 'STU';
       const invoiceNo = `INV-${data.year}${String(data.month).padStart(2, '0')}-${admission}-${Date.now().toString().slice(-6)}`;
 
-      return tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           schoolId,
           studentId: data.studentId,
@@ -128,7 +116,7 @@ export async function POST(request: Request) {
           totalAmount,
           status: 'UNPAID',
           items: {
-            create: finalItems.map((item) => ({
+            create: requestedItems.map((item) => ({
               feeHeadId: item.feeHeadId,
               amount: item.amount,
               originalAmount: item.amount,
@@ -137,9 +125,10 @@ export async function POST(request: Request) {
         },
         include: { items: { include: { feeHead: true } } },
       });
+      return { ...created, updatedExisting: false };
     });
 
-    return NextResponse.json(invoice, { status: 201 });
+    return NextResponse.json(invoice, { status: invoice.updatedExisting ? 200 : 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid challan', issues: error.issues }, { status: 400 });

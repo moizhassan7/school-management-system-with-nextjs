@@ -25,7 +25,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import StudentDiscountManager from '@/components/finance/student-discount-manager';
 import { toast } from 'sonner';
 
 function formatRs(amount: number) {
@@ -177,7 +176,6 @@ export default function FeeCollectionPage() {
                   </h2>
                   <p className="text-sm text-muted-foreground">{studentData.invoices.length} invoice(s)</p>
                 </div>
-                <StudentDiscountManager studentId={studentData.id} studentName={studentData.name} />
               </div>
 
               <div className="overflow-x-auto">

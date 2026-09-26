@@ -8,20 +8,18 @@ import { schoolIdForSubjectGroup } from '@/lib/tenant';
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.schoolId) {
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!session.user.schoolId && session.user.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const role = String(session.user.role || '');
-    let subjectWhere: any = {
-      subjectGroup: {
-        classGroup: {
-          campus: {
-            schoolId: session.user.schoolId
-          }
-        }
-      }
-    };
+    let subjectWhere: any =
+      role === 'SUPER_ADMIN' && !session.user.schoolId
+        ? {}
+        : { schoolId: session.user.schoolId };
 
     if (role === 'TEACHER') {
       const staff = await prisma.staffRecord.findUnique({ where: { userId: session.user.id! } });
@@ -43,14 +41,8 @@ export async function GET(request: NextRequest) {
       where: subjectWhere,
       include: {
         subjectGroup: {
-          include: {
-            classGroup: {
-              include: {
-                campus: true
-              }
-            }
-          }
-        }
+          select: { id: true, name: true },
+        },
       },
       orderBy: {
         name: 'asc'
@@ -71,7 +63,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.schoolId) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     if (!can(session.user, 'CONFIGURATION', 'CREATE')) {
@@ -80,26 +72,31 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { name, code, subjectGroupId, description } = body;
-
-    if (!name || !subjectGroupId) {
-      return NextResponse.json(
-        { error: 'Name and subjectGroupId are required' },
-        { status: 400 }
-      );
+    if (!name || !String(name).trim()) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
 
-    const groupSchoolId = await schoolIdForSubjectGroup(subjectGroupId);
-    if (!groupSchoolId || (session.user.role !== 'SUPER_ADMIN' && groupSchoolId !== session.user.schoolId)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    let schoolId = session.user.schoolId || null;
+    if (subjectGroupId) {
+      const groupSchoolId = await schoolIdForSubjectGroup(subjectGroupId);
+      if (!groupSchoolId || (session.user.role !== 'SUPER_ADMIN' && groupSchoolId !== session.user.schoolId)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      schoolId = groupSchoolId;
+    }
+    if (!schoolId) {
+      return NextResponse.json({ error: 'School is required' }, { status: 400 });
     }
 
     const subject = await prisma.subject.create({
       data: {
-        name,
-        code,
-        subjectGroupId,
-        description
-      }
+        name: String(name).trim(),
+        code: code ? String(code).trim() : null,
+        subjectGroupId: subjectGroupId || null,
+        description: description || null,
+        schoolId,
+      },
+      include: { subjectGroup: { select: { id: true, name: true } } },
     });
 
     return NextResponse.json(subject, { status: 201 });

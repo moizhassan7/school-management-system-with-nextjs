@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -145,6 +146,11 @@ export default function GenerateInvoicesPage() {
                     </div>
                     <CardDescription>
                         This tool will bulk generate invoices for all active students in the selected class based on the fee structure.
+                        For one student with custom amounts, use{' '}
+                        <Link href="/finance/invoices/custom" className="font-medium text-primary hover:underline">
+                            Custom Challan
+                        </Link>
+                        .
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

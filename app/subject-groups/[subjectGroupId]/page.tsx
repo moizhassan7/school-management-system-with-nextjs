@@ -1,27 +1,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
     Plus, 
     ArrowLeft, 
-    Save, 
-    X, 
     Trash2, 
     BookCopy 
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Card,
     CardContent,
     CardHeader,
     CardTitle,
-    CardDescription
 } from '@/components/ui/card';
 
 // --- Types ---
@@ -29,47 +31,59 @@ interface SubjectItem { id: string; name: string; }
 
 export default function SubjectGroupDetailPage() {
     const params = useParams();
-    const router = useRouter();
     const subjectGroupId = params.subjectGroupId as string;
     
     // Data State
     const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+    const [catalog, setCatalog] = useState<SubjectItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    
-    // Add Forms State
-    const [isAddingSubject, setIsAddingSubject] = useState(false);
-    const [newItemName, setNewItemName] = useState('');
+    const [selectedSubjectId, setSelectedSubjectId] = useState('');
+
+    const loadSubjects = async () => {
+        const [groupRes, catalogRes] = await Promise.all([
+            fetch(`/api/subject-groups/${subjectGroupId}/subjects`),
+            fetch('/api/subjects'),
+        ]);
+        const groupData = groupRes.ok ? await groupRes.json() : [];
+        const catalogData = catalogRes.ok ? await catalogRes.json() : [];
+        setSubjects(Array.isArray(groupData) ? groupData : []);
+        setCatalog(Array.isArray(catalogData) ? catalogData : []);
+        setIsLoading(false);
+    };
 
     useEffect(() => {
         if (subjectGroupId) {
-            fetch(`/api/subject-groups/${subjectGroupId}/subjects`).then(res => res.json()).then((subjectData) => {
-                setSubjects(subjectData);
-                setIsLoading(false);
-            });
+            loadSubjects();
         }
     }, [subjectGroupId]);
 
     // --- Handlers ---
 
-    const handleAddSubject = async (e: React.FormEvent) => {
+    const available = catalog.filter((item) => !subjects.some((subject) => subject.id === item.id));
+
+    const handleAttachSubject = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!selectedSubjectId) return;
         const res = await fetch(`/api/subject-groups/${subjectGroupId}/subjects`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newItemName }),
+            body: JSON.stringify({ subjectId: selectedSubjectId }),
         });
         if (res.ok) {
-            setSubjects([...subjects, await res.json()]);
-            setNewItemName('');
-            setIsAddingSubject(false);
+            setSelectedSubjectId('');
+            await loadSubjects();
         }
     };
 
-    const handleDeleteSubject = async (id: string) => {
-        if(!confirm("Delete this subject? It will be removed from all exams.")) return;
-        const res = await fetch(`/api/subjects/${id}`, { method: 'DELETE' });
-        if(res.ok) {
-            setSubjects(subjects.filter(s => s.id !== id));
+    const handleRemoveSubject = async (id: string) => {
+        if (!confirm('Remove this subject from the group? It stays in the school subject list.')) return;
+        const res = await fetch(`/api/subjects/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subjectGroupId: null }),
+        });
+        if (res.ok) {
+            setSubjects(subjects.filter((subject) => subject.id !== id));
         }
     };
 
@@ -85,7 +99,7 @@ export default function SubjectGroupDetailPage() {
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Manage Subject Group</h1>
-                        <p className="text-muted-foreground">Define subjects available in this stream.</p>
+                        <p className="text-muted-foreground">Attach subjects from the school list to this stream.</p>
                     </div>
                 </div>
             </div>
@@ -99,29 +113,29 @@ export default function SubjectGroupDetailPage() {
                     </TabsList>
 
                     <TabsContent value="subjects" className="space-y-4 mt-6">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-semibold">Curriculum Subjects</h2>
-                            <Button onClick={() => setIsAddingSubject(!isAddingSubject)} size="sm">
-                                {isAddingSubject ? <X className="h-4 w-4 mr-2"/> : <Plus className="h-4 w-4 mr-2"/>}
-                                {isAddingSubject ? 'Cancel' : 'Add Subject'}
-                            </Button>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h2 className="text-lg font-semibold">Subjects in this group</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    New subjects are added in Configuration → Subjects.
+                                </p>
+                            </div>
+                            <form onSubmit={handleAttachSubject} className="flex gap-2">
+                                <Select value={selectedSubjectId || undefined} onValueChange={setSelectedSubjectId}>
+                                    <SelectTrigger className="w-56">
+                                        <SelectValue placeholder="Select a subject" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {available.map((item) => (
+                                            <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button type="submit" size="sm" disabled={!selectedSubjectId}>
+                                    <Plus className="h-4 w-4 mr-2" /> Add
+                                </Button>
+                            </form>
                         </div>
-
-                        {isAddingSubject && (
-                            <Card className="border-indigo-100 shadow-sm animate-in fade-in slide-in-from-top-2">
-                                <CardContent className="pt-6">
-                                    <form onSubmit={handleAddSubject} className="flex gap-4">
-                                        <Input 
-                                            placeholder="Subject Name (e.g. Mathematics, Physics)" 
-                                            value={newItemName} 
-                                            onChange={e => setNewItemName(e.target.value)} 
-                                            autoFocus 
-                                        />
-                                        <Button type="submit">Save</Button>
-                                    </form>
-                                </CardContent>
-                            </Card>
-                        )}
 
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             {subjects.map((sub) => (
@@ -137,7 +151,7 @@ export default function SubjectGroupDetailPage() {
                                                 variant="ghost" 
                                                 size="icon" 
                                                 className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
-                                                onClick={() => handleDeleteSubject(sub.id)}
+                                                onClick={() => handleRemoveSubject(sub.id)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -146,12 +160,14 @@ export default function SubjectGroupDetailPage() {
                                 </Card>
                             ))}
                         </div>
-                        {subjects.length === 0 && !isAddingSubject && (
+                        {subjects.length === 0 && (
                             <div className="text-center py-12 border border-dashed rounded-lg bg-slate-50">
                                 <BookCopy className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                                <h3 className="font-semibold text-lg">No Subjects Added</h3>
-                                <p className="text-muted-foreground mb-4">Add subjects here to make them available for Exams.</p>
-                                <Button variant="outline" onClick={() => setIsAddingSubject(true)}>Add First Subject</Button>
+                                <h3 className="font-semibold text-lg">No subjects in this group</h3>
+                                <p className="text-muted-foreground mb-4">Add subjects in Configuration, then attach them here.</p>
+                                <Link href="/configuration?tab=subjects">
+                                    <Button variant="outline">Open Subjects</Button>
+                                </Link>
                             </div>
                         )}
                     </TabsContent>

@@ -29,6 +29,39 @@ export async function getTeacherSections(teacherUserId: string) {
   return staff.sectionsIncharged;
 }
 
+/** Super Admin sees every section. Admin sees every section in their school. */
+export async function getSchoolSections(role: string, schoolId?: string | null) {
+  const schoolFilter =
+    role === 'SUPER_ADMIN'
+      ? {}
+      : {
+          myClass: {
+            classGroup: {
+              campus: { schoolId: schoolId || '__none__' },
+            },
+          },
+        };
+
+  return prisma.section.findMany({
+    where: {
+      isActive: true,
+      ...schoolFilter,
+    },
+    include: {
+      myClass: {
+        include: {
+          classGroup: { select: { name: true } },
+        },
+      },
+    },
+    orderBy: [
+      { myClass: { classGroup: { name: 'asc' } } },
+      { myClass: { name: 'asc' } },
+      { name: 'asc' },
+    ],
+  });
+}
+
 export async function getSectionStudents(sectionId: string) {
   const students = await prisma.studentRecord.findMany({
     where: {

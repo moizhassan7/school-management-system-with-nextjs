@@ -15,6 +15,7 @@ import {
   ChevronDown,
   BookOpen,
   FileText,
+  Receipt,
   Award,
   ClipboardCheck,
   CreditCard,
@@ -210,11 +211,8 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
 
             {isFinanceExpanded && (
               <div className="mt-1 ml-4 space-y-1 border-l border-border pl-3">
-                <Link href="/finance/invoices" className={subLinkClass(isActive('/finance/invoices'))} onClick={go}>
-                  <FileText className="h-3.5 w-3.5" /> Invoices
-                </Link>
-                <Link href="/finance/collect" className={subLinkClass(isActive('/finance/collect'))} onClick={go}>
-                  <CreditCard className="h-3.5 w-3.5" /> Collect Fees
+                <Link href="/finance/config" className={subLinkClass(isActive('/finance/config'))} onClick={go}>
+                  <Settings className="h-3.5 w-3.5" /> Configuration
                 </Link>
                 <Link
                   href="/finance/invoices/generate"
@@ -223,11 +221,18 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
                 >
                   <Plus className="h-3.5 w-3.5" /> Generate Invoices
                 </Link>
-                <Link href="/finance/discounts" className={subLinkClass(isActive('/finance/discounts'))} onClick={go}>
-                  <Banknote className="h-3.5 w-3.5" /> Discounts
+                <Link
+                  href="/finance/invoices/custom"
+                  className={subLinkClass(isActive('/finance/invoices/custom'))}
+                  onClick={go}
+                >
+                  <Receipt className="h-3.5 w-3.5" /> Custom Challan
                 </Link>
-                <Link href="/finance/config" className={subLinkClass(isActive('/finance/config'))} onClick={go}>
-                  <Settings className="h-3.5 w-3.5" /> Configuration
+                <Link href="/finance/invoices" className={subLinkClass(isActive('/finance/invoices'))} onClick={go}>
+                  <FileText className="h-3.5 w-3.5" /> Invoices
+                </Link>
+                <Link href="/finance/collect" className={subLinkClass(isActive('/finance/collect'))} onClick={go}>
+                  <CreditCard className="h-3.5 w-3.5" /> Collect Fees
                 </Link>
                 <Link href="/parents" className={subLinkClass(isPathActive('/parents'))} onClick={go}>
                   <Users className="h-3.5 w-3.5" /> Parents
@@ -259,12 +264,6 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
 
             {isExamsExpanded && (
               <div className="mt-1 ml-4 space-y-1 border-l border-border pl-3">
-                <Link href="/exams/marks-entry" className={subLinkClass(isActive('/exams/marks-entry'))} onClick={go}>
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> Marks Entry
-                </Link>
-                <Link href="/exams/class-tests" className={subLinkClass(isActive('/exams/class-tests'))} onClick={go}>
-                  <ClipboardList className="h-3.5 w-3.5" /> Class Tests
-                </Link>
                 <Link
                   href="/exams/grading-systems"
                   className={subLinkClass(isActive('/exams/grading-systems'))}
@@ -272,13 +271,19 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
                 >
                   <Award className="h-3.5 w-3.5" /> Grading Rules
                 </Link>
+                <Link href="/exams/configure" className={subLinkClass(isActive('/exams/configure'))} onClick={go}>
+                  <ClipboardCheck className="h-3.5 w-3.5" /> Exam Setup
+                </Link>
                 {can(user, 'EXAMS', 'CREATE') && (
                   <Link href="/exams/new" className={subLinkClass(isActive('/exams/new'))} onClick={go}>
                     <Plus className="h-3.5 w-3.5" /> Create Exam
                   </Link>
                 )}
-                <Link href="/exams/configure" className={subLinkClass(isActive('/exams/configure'))} onClick={go}>
-                  <ClipboardCheck className="h-3.5 w-3.5" /> Exam Setup
+                <Link href="/exams/class-tests" className={subLinkClass(isActive('/exams/class-tests'))} onClick={go}>
+                  <ClipboardList className="h-3.5 w-3.5" /> Class Tests
+                </Link>
+                <Link href="/exams/marks-entry" className={subLinkClass(isActive('/exams/marks-entry'))} onClick={go}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Marks Entry
                 </Link>
                 <Link
                   href="/exams/results/report-card"

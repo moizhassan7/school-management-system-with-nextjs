@@ -128,8 +128,8 @@ export default function AccountantDashboard({ data }: AccountantDashboardProps) 
               { href: '/finance/collect', icon: CreditCard, label: 'Collect Fee', tone: 'bg-emerald-100 text-emerald-700' },
               { href: '/finance/invoices', icon: Wallet, label: 'View Invoices', tone: 'bg-accent text-cta' },
               { href: '/finance/invoices/generate', icon: DollarSign, label: 'Generate Invoices', tone: 'bg-secondary text-primary' },
+              { href: '/finance/invoices/custom', icon: Wallet, label: 'Custom Challan', tone: 'bg-accent text-cta' },
               { href: '/parents', icon: AlertCircle, label: 'Parent Overview', tone: 'bg-primary/10 text-primary' },
-              { href: '/finance/discounts', icon: TrendingUp, label: 'Manage Discounts', tone: 'bg-secondary text-primary' },
             ].map((action) => (
               <Link
                 key={action.href}

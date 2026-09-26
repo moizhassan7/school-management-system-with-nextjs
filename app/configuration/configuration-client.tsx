@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Search, Plus, Building2, School, Layers, BookOpen, Grid3X3, Library } from 'lucide-react';
+import { Search, Plus, Building2, School, Layers, BookOpen, Grid3X3, Library, BookMarked } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,7 +89,14 @@ type SubjectGroupRow = {
   subjects: { id: string; name: string }[];
 };
 
-type ConfigEntity = 'school' | 'campus' | 'classGroup' | 'class' | 'section' | 'subjectGroup';
+type SubjectRow = {
+  id: string;
+  name: string;
+  code?: string | null;
+  subjectGroup?: { id: string; name: string } | null;
+};
+
+type ConfigEntity = 'school' | 'campus' | 'classGroup' | 'class' | 'section' | 'subjectGroup' | 'subject';
 
 const VALID_TABS = new Set([
   'schools',
@@ -97,6 +104,7 @@ const VALID_TABS = new Set([
   'groups',
   'classes',
   'sections',
+  'subjects',
   'subject-groups',
 ]);
 
@@ -105,6 +113,7 @@ export default function ConfigurationClient() {
   const { refreshBrand } = useSchoolBrand();
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [subjectGroups, setSubjectGroups] = useState<SubjectGroupRow[]>([]);
+  const [subjects, setSubjects] = useState<SubjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const initialTab = searchParams.get('tab') || 'schools';
@@ -145,19 +154,23 @@ export default function ConfigurationClient() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [schoolsRes, groupsRes] = await Promise.all([
+      const [schoolsRes, groupsRes, subjectsRes] = await Promise.all([
         fetch('/api/schools'),
         fetch('/api/subject-groups'),
+        fetch('/api/subjects'),
       ]);
       const schoolsData = await schoolsRes.json();
       const groupsData = groupsRes.ok ? await groupsRes.json() : [];
+      const subjectsData = subjectsRes.ok ? await subjectsRes.json() : [];
       if (!schoolsRes.ok) throw new Error(schoolsData.error || 'Failed to load');
       setSchools(Array.isArray(schoolsData) ? schoolsData : []);
       setSubjectGroups(Array.isArray(groupsData) ? groupsData : []);
+      setSubjects(Array.isArray(subjectsData) ? subjectsData : []);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load configuration');
       setSchools([]);
       setSubjectGroups([]);
+      setSubjects([]);
     } finally {
       setLoading(false);
     }
@@ -253,6 +266,30 @@ export default function ConfigurationClient() {
       );
     });
   }, [subjectGroups, q]);
+
+  const subjectRows = useMemo(() => {
+    return subjects.filter((subject) => {
+      if (!q) return true;
+      return (
+        subject.name.toLowerCase().includes(q) ||
+        subject.code?.toLowerCase().includes(q) ||
+        subject.subjectGroup?.name?.toLowerCase().includes(q)
+      );
+    });
+  }, [subjects, q]);
+
+  const deleteSubject = async (id: string, name: string) => {
+    if (!confirm(`Delete ${name}? It will be removed from staff assignments.`)) return;
+    try {
+      const res = await fetch(`/api/subjects/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to delete subject');
+      toast.success('Subject deleted');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete subject');
+    }
+  };
 
   const openCreate = (type: ConfigEntity) => {
     setEntity(type);
@@ -389,6 +426,13 @@ export default function ConfigurationClient() {
             body: JSON.stringify({ name: form.name }),
           });
         }
+      } else if (entity === 'subject') {
+        const payload = { name: form.name, code: form.code || '' };
+        res = await fetch(dialogMode === 'create' ? '/api/subjects' : `/api/subjects/${editingId}`, {
+          method: dialogMode === 'create' ? 'POST' : 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
       } else if (entity === 'subjectGroup') {
         res = await fetch('/api/subject-groups', {
           method: 'POST',
@@ -464,7 +508,7 @@ export default function ConfigurationClient() {
           Configuration
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Master setup for schools, campuses, classes, sections, and subject groups.
+          Master setup for schools, campuses, classes, sections, and subjects.
         </p>
       </div>
 
@@ -494,6 +538,9 @@ export default function ConfigurationClient() {
           </TabsTrigger>
           <TabsTrigger value="sections" className="cursor-pointer gap-1 rounded-lg">
             <Grid3X3 className="h-4 w-4" /> Sections
+          </TabsTrigger>
+          <TabsTrigger value="subjects" className="cursor-pointer gap-1 rounded-lg">
+            <BookMarked className="h-4 w-4" /> Subjects
           </TabsTrigger>
           <TabsTrigger value="subject-groups" className="cursor-pointer gap-1 rounded-lg">
             <Library className="h-4 w-4" /> Subject Groups
@@ -778,6 +825,65 @@ export default function ConfigurationClient() {
               </div>
             </TabsContent>
 
+            <TabsContent value="subjects" className="space-y-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Define subjects here, then assign them to staff from the staff form.
+                </p>
+                <Button onClick={() => openCreate('subject')} className="gap-2">
+                  <Plus className="h-4 w-4" /> Add Subject
+                </Button>
+              </div>
+              <div className="bento-tile overflow-hidden">
+                {subjectRows.length === 0 ? (
+                  <div className="py-16 text-center text-muted-foreground">
+                    No subjects yet. Add English, Mathematics, or any subject your staff will teach.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Subject Group</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {subjectRows.map((subject) => (
+                        <TableRow key={subject.id}>
+                          <TableCell className="font-medium">{subject.name}</TableCell>
+                          <TableCell>{subject.code || '—'}</TableCell>
+                          <TableCell>{subject.subjectGroup?.name || '—'}</TableCell>
+                          <TableCell className="space-x-2 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                openEdit('subject', subject.id, {
+                                  name: subject.name,
+                                  code: subject.code || '',
+                                })
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deleteSubject(subject.id, subject.name)}
+                            >
+                              Delete
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </TabsContent>
+
             <TabsContent value="subject-groups" className="space-y-4">
               <div className="flex justify-end">
                 <Button onClick={() => openCreate('subjectGroup')} className="gap-2">
@@ -1055,6 +1161,26 @@ export default function ConfigurationClient() {
                   <Input
                     value={form.name || ''}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+            {entity === 'subject' && (
+              <>
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={form.name || ''}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Mathematics"
+                  />
+                </div>
+                <div>
+                  <Label>Code</Label>
+                  <Input
+                    value={form.code || ''}
+                    onChange={(e) => setForm({ ...form, code: e.target.value })}
+                    placeholder="Optional, e.g. MATH"
                   />
                 </div>
               </>

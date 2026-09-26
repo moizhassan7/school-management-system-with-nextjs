@@ -23,6 +23,7 @@ export default function FinanceConfigPage() {
   const [selectedHeadId, setSelectedHeadId] = useState('');
 
   const [newFeeHeadName, setNewFeeHeadName] = useState('');
+  const [newFeeHeadType, setNewFeeHeadType] = useState<'MONTHLY' | 'ONE_TIME'>('MONTHLY');
   const [selectedSubHeadId, setSelectedSubHeadId] = useState('');
 
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -93,11 +94,12 @@ export default function FinanceConfigPage() {
       body: JSON.stringify({
         name: newFeeHeadName,
         schoolId: schools[0]?.id,
-        type: 'MONTHLY',
+        type: newFeeHeadType,
         accountSubHeadId: selectedSubHeadId,
       }),
     });
     setNewFeeHeadName('');
+    setNewFeeHeadType('MONTHLY');
     refreshData();
   };
 
@@ -286,6 +288,18 @@ export default function FinanceConfigPage() {
                   onChange={(e) => setNewFeeHeadName(e.target.value)}
                 />
               </div>
+              <div className="w-full space-y-2 md:w-1/4">
+                <Label>Charge type</Label>
+                <Select value={newFeeHeadType} onValueChange={(value) => setNewFeeHeadType(value as 'MONTHLY' | 'ONE_TIME')}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MONTHLY">Monthly fee</SelectItem>
+                    <SelectItem value="ONE_TIME">One-time charge</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="w-full space-y-2 md:w-1/3">
                 <Label>Link to Account Subhead</Label>
                 <Select onValueChange={setSelectedSubHeadId}>
@@ -319,6 +333,9 @@ export default function FinanceConfigPage() {
                 {feeHeads.map((head) => (
                   <div key={head.id} className="rounded-xl border border-border/70 bg-muted/20 p-4 transition-shadow hover:shadow-sm">
                     <div className="font-heading font-semibold text-foreground">{head.name}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {head.type === 'ONE_TIME' ? 'One-time charge' : 'Monthly fee'}
+                    </div>
                     <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                       Linked to:{' '}
                       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-primary">

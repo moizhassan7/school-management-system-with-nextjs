@@ -18,6 +18,7 @@ import { AttendanceStatus } from '@prisma/client';
 interface AttendanceDashboardProps {
   initialSections: any[];
   userId: string;
+  seesAllClasses?: boolean;
 }
 
 interface StudentAttendance {
@@ -31,7 +32,18 @@ interface StudentAttendance {
   };
 }
 
-export default function AttendanceDashboard({ initialSections, userId }: AttendanceDashboardProps) {
+function sectionLabel(section: any) {
+  const group = section?.myClass?.classGroup?.name;
+  const className = section?.myClass?.name;
+  const sectionName = section?.name;
+  return [group, className, sectionName].filter(Boolean).join(' · ');
+}
+
+export default function AttendanceDashboard({
+  initialSections,
+  userId,
+  seesAllClasses = false,
+}: AttendanceDashboardProps) {
   const [selectedSectionId, setSelectedSectionId] = useState<string>(
     initialSections.length > 0 ? initialSections[0].id : ''
   );
@@ -134,7 +146,11 @@ export default function AttendanceDashboard({ initialSections, userId }: Attenda
       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
         <AlertCircle className="w-12 h-12 text-yellow-500 mb-4" />
         <h2 className="text-xl font-semibold">No Classes Found</h2>
-        <p className="text-gray-500">You are not in charge of any classes.</p>
+        <p className="text-gray-500">
+          {seesAllClasses
+            ? 'No active classes or sections have been created yet.'
+            : 'You are not in charge of any classes.'}
+        </p>
       </div>
     );
   }
@@ -148,20 +164,18 @@ export default function AttendanceDashboard({ initialSections, userId }: Attenda
           <h1 className="text-3xl font-bold tracking-tight text-gray-900">Attendance Tracking</h1>
           <p className="text-gray-500">
             Record and monitor student attendance for{' '}
-            <span className="font-semibold text-gray-900">
-              {selectedSection?.myClass?.name} ({selectedSection?.name})
-            </span>
+            <span className="font-semibold text-gray-900">{sectionLabel(selectedSection)}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
            <Select value={selectedSectionId} onValueChange={setSelectedSectionId}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select Class" />
+            <SelectTrigger className="w-[280px]">
+              <SelectValue placeholder="Select class" />
             </SelectTrigger>
             <SelectContent>
               {initialSections.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.myClass.name} - {s.name}
+                  {sectionLabel(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -327,7 +341,7 @@ export default function AttendanceDashboard({ initialSections, userId }: Attenda
                         <Clock className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                        <p className="font-medium">{selectedSection?.myClass?.name} - {selectedSection?.name}</p>
+                        <p className="font-medium">{sectionLabel(selectedSection)}</p>
                         <p className="text-sm text-blue-100">Grade {selectedSection?.myClass?.name}</p>
                     </div>
                 </div>

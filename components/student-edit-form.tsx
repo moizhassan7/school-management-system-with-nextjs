@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Save, Building2, User } from 'lucide-react';
+import { Banknote, Building2, Loader2, Plus, Save, Trash2, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -50,6 +50,27 @@ const editSchema = z.object({
 
 type FormValues = z.infer<typeof editSchema>;
 
+type FeeLine = {
+  feeHeadId: string;
+  feeHeadName: string;
+  amount: string;
+};
+
+type FeeHeadOption = {
+  id: string;
+  name: string;
+  schoolId?: string | null;
+};
+
+function linesFromSnapshot(items: any[] | undefined): FeeLine[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => ({
+    feeHeadId: item.feeHeadId,
+    feeHeadName: item.feeHead?.name || 'Fee Head',
+    amount: String(Number(item.amount ?? 0)),
+  }));
+}
+
 interface StudentEditFormProps {
   studentId: string;
   initialData: any;
@@ -66,6 +87,12 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
   const [availableStreams, setAvailableStreams] = useState<any[]>([]);
   const [availableSections, setAvailableSections] = useState<any[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [feeLines, setFeeLines] = useState<FeeLine[]>(() =>
+    linesFromSnapshot(initialData.studentRecord?.feeStructure?.items)
+  );
+  const [feeHeads, setFeeHeads] = useState<FeeHeadOption[]>([]);
+  const [headToAdd, setHeadToAdd] = useState('');
+  const [loadingFees, setLoadingFees] = useState(false);
 
   const record = initialData.studentRecord;
   const admissionNumber = record?.admissionNumber || '—';
@@ -97,6 +124,11 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
   const selectedCampus = form.watch('campusId');
   const selectedGroup = form.watch('classGroupId');
   const selectedClass = form.watch('classId');
+  const initialClassId = record?.classId || '';
+  const savedFeeLines = useMemo(
+    () => linesFromSnapshot(record?.feeStructure?.items),
+    [record]
+  );
 
   useEffect(() => {
     const loadData = async () => {
@@ -161,6 +193,48 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
       .then((data) => setAvailableSections(Array.isArray(data) ? data : []));
   }, [selectedClass, hydrated]);
 
+  useEffect(() => {
+    fetch('/api/finance/fee-heads')
+      .then(async (res) => {
+        const data = await res.json().catch(() => []);
+        if (!res.ok) return;
+        setFeeHeads(Array.isArray(data) ? data : []);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || !selectedClass) return;
+
+    if (selectedClass === initialClassId && savedFeeLines.length > 0) {
+      setFeeLines(savedFeeLines);
+      return;
+    }
+
+    let cancelled = false;
+    const loadClassFees = async () => {
+      setLoadingFees(true);
+      try {
+        const res = await fetch(`/api/finance/fee-structures?classId=${selectedClass}`);
+        const data = await res.json().catch(() => []);
+        if (!res.ok || cancelled) return;
+        const normalized = (Array.isArray(data) ? data : []).map((item: any) => ({
+          feeHeadId: item.feeHeadId,
+          feeHeadName: item.feeHead?.name || 'Fee Head',
+          amount: String(Number(item.amount ?? 0)),
+        }));
+        setFeeLines(normalized);
+      } finally {
+        if (!cancelled) setLoadingFees(false);
+      }
+    };
+
+    loadClassFees();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClass, hydrated, initialClassId, savedFeeLines]);
+
   const onSubmit = async (data: FormValues) => {
     setIsSubmitting(true);
     try {
@@ -177,6 +251,12 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
         subjectGroupId: data.subjectGroupId || null,
         rollNumber: data.rollNumber || null,
         admissionDate: data.admissionDate,
+        feeStructureItems: feeLines
+          .filter((line) => line.feeHeadId && line.amount !== '' && Number(line.amount) >= 0)
+          .map((line) => ({
+            feeHeadId: line.feeHeadId,
+            amount: Number(line.amount),
+          })),
       };
       if (data.password && data.password.length >= 6) {
         payload.password = data.password;
@@ -203,6 +283,28 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const unusedHeads = feeHeads.filter(
+    (head) =>
+      !feeLines.some((line) => line.feeHeadId === head.id) &&
+      (!selectedSchool || !head.schoolId || head.schoolId === selectedSchool)
+  );
+
+  const updateFeeAmount = (feeHeadId: string, amount: string) => {
+    setFeeLines((current) =>
+      current.map((line) => (line.feeHeadId === feeHeadId ? { ...line, amount } : line))
+    );
+  };
+
+  const addFeeHead = () => {
+    const head = feeHeads.find((item) => item.id === headToAdd);
+    if (!head) return;
+    setFeeLines((current) => [
+      ...current,
+      { feeHeadId: head.id, feeHeadName: head.name, amount: '' },
+    ]);
+    setHeadToAdd('');
   };
 
   return (
@@ -577,6 +679,88 @@ export default function StudentEditForm({ studentId, initialData }: StudentEditF
                 </FormItem>
               )}
             />
+          </div>
+        </div>
+
+        <div className="bento-tile overflow-hidden">
+          <div className="flex items-center gap-3 border-b border-border/70 bg-muted/40 px-5 py-4">
+            <div className="rounded-xl bg-primary/10 p-1.5 text-primary">
+              <Banknote className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="font-heading text-lg font-semibold text-foreground">Fee Structure</h3>
+              <p className="text-sm text-muted-foreground">
+                Change amounts for this student only. Class defaults stay the same.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4 p-5">
+            {loadingFees ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading fee structure...
+              </div>
+            ) : feeLines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No fee lines yet. Add a fee head, or set a class fee structure in Finance → Configuration.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {feeLines.map((line) => (
+                  <div
+                    key={line.feeHeadId}
+                    className="grid grid-cols-1 items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2 sm:grid-cols-[1fr_160px_auto]"
+                  >
+                    <span className="text-sm font-medium text-foreground">{line.feeHeadName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Rs.</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.amount}
+                        onChange={(event) => updateFeeAmount(line.feeHeadId, event.target.value)}
+                        className="rounded-xl text-right"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="cursor-pointer"
+                      onClick={() =>
+                        setFeeLines((current) => current.filter((item) => item.feeHeadId !== line.feeHeadId))
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={headToAdd || undefined} onValueChange={setHeadToAdd}>
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Add another fee head" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unusedHeads.map((head) => (
+                    <SelectItem key={head.id} value={head.id}>
+                      {head.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                className="cursor-pointer gap-2"
+                disabled={!headToAdd}
+                onClick={addFeeHead}
+              >
+                <Plus className="h-4 w-4" /> Add
+              </Button>
+            </div>
           </div>
         </div>
 

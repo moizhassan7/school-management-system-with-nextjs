@@ -22,6 +22,14 @@ const updateStudentSchema = z.object({
   subjectGroupId: z.string().optional().nullable(),
   rollNumber: z.string().optional().nullable(),
   admissionDate: z.string().optional(),
+  feeStructureItems: z
+    .array(
+      z.object({
+        feeHeadId: z.string().min(1),
+        amount: z.coerce.number().nonnegative(),
+      })
+    )
+    .optional(),
 });
 
 export async function GET(
@@ -188,6 +196,57 @@ export async function PUT(
         },
       });
 
+      if (data.feeStructureItems) {
+        const resolvedSchoolId = data.schoolId || existing.schoolId;
+        if (!resolvedSchoolId) {
+          throw Object.assign(new Error('School is required to save fee structure'), { status: 400 });
+        }
+
+        const feeHeadIds = data.feeStructureItems.map((item) => item.feeHeadId);
+        if (new Set(feeHeadIds).size !== feeHeadIds.length) {
+          throw Object.assign(new Error('Each fee head can only be added once'), { status: 400 });
+        }
+
+        if (feeHeadIds.length > 0) {
+          const heads = await tx.feeHead.findMany({
+            where: { id: { in: feeHeadIds }, schoolId: resolvedSchoolId },
+            select: { id: true },
+          });
+          if (heads.length !== feeHeadIds.length) {
+            throw Object.assign(new Error('One or more fee heads do not belong to this school'), {
+              status: 400,
+            });
+          }
+        }
+
+        const structure = await tx.studentFeeStructure.upsert({
+          where: { studentRecordId: existing.studentRecord!.id },
+          create: {
+            studentRecordId: existing.studentRecord!.id,
+            schoolId: resolvedSchoolId,
+            classId: data.classId || existing.studentRecord!.classId,
+          },
+          update: {
+            schoolId: resolvedSchoolId,
+            classId: data.classId || existing.studentRecord!.classId,
+          },
+        });
+
+        await tx.studentFeeStructureItem.deleteMany({
+          where: { studentFeeStructureId: structure.id },
+        });
+
+        if (data.feeStructureItems.length > 0) {
+          await tx.studentFeeStructureItem.createMany({
+            data: data.feeStructureItems.map((item) => ({
+              studentFeeStructureId: structure.id,
+              feeHeadId: item.feeHeadId,
+              amount: item.amount,
+            })),
+          });
+        }
+      }
+
       return { ...user, studentRecord, passwordHash: undefined };
     });
 
@@ -195,6 +254,10 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ errors: error.issues }, { status: 400 });
+    }
+    const status = (error as { status?: number })?.status;
+    if (status === 400) {
+      return NextResponse.json({ error: (error as Error).message }, { status: 400 });
     }
     if ((error as { code?: string })?.code === 'P2002') {
       return NextResponse.json(

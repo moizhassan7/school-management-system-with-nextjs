@@ -5,8 +5,9 @@ import { requirePermission } from '@/lib/authz';
 import { forbidOrMissing, schoolIdForSubjectGroup } from '@/lib/tenant';
 
 const subjectSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  code: z.string().optional(), // e.g. PHY-101
+  name: z.string().min(1, 'Name is required').optional(),
+  code: z.string().optional(),
+  subjectId: z.string().min(1).optional(),
 });
 
 export async function GET(
@@ -41,12 +42,33 @@ export async function POST(
     if (denied) return denied;
     const body = await request.json();
     const validated = subjectSchema.parse(body);
+    const schoolId = await schoolIdForSubjectGroup(subjectGroupId);
+    if (!schoolId) {
+      return NextResponse.json({ error: 'Subject group not found' }, { status: 404 });
+    }
+
+    if (validated.subjectId) {
+      const existing = await prisma.subject.findUnique({ where: { id: validated.subjectId } });
+      if (!existing || existing.schoolId !== schoolId) {
+        return NextResponse.json({ error: 'Subject not found in this school' }, { status: 404 });
+      }
+      const subject = await prisma.subject.update({
+        where: { id: existing.id },
+        data: { subjectGroupId },
+      });
+      return NextResponse.json(subject);
+    }
+
+    if (!validated.name) {
+      return NextResponse.json({ error: 'Name is required' }, { status: 400 });
+    }
 
     const subject = await prisma.subject.create({
       data: {
         name: validated.name,
-        // code: validated.code, // Uncomment if you added 'code' to schema
+        code: validated.code,
         subjectGroupId,
+        schoolId,
       },
     });
 

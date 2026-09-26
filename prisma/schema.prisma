@@ -117,6 +117,7 @@ model School {
   invoices Invoice[]
   payments Payment[]
   exams Exam[]
+  subjects Subject[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -364,8 +365,10 @@ model Subject {
   name        String
   code        String?
   description String?
-  subjectGroupId String
-  subjectGroup SubjectGroup @relation(fields: [subjectGroupId], references: [id], onDelete: Cascade)
+  schoolId    String
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  subjectGroupId String?
+  subjectGroup SubjectGroup? @relation(fields: [subjectGroupId], references: [id], onDelete: SetNull)
   examConfigurations ExamConfiguration[]
   subjectAssignments SubjectAssignment[]
   examResults ExamResult[]
