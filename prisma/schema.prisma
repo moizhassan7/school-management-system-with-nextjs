@@ -218,6 +218,8 @@ model StudentRecord {
 
   @@unique([schoolId, admissionNumber])
   @@index([classId])
+  @@index([sectionId])
+  @@index([schoolId])
 }
 
 model Campus {
@@ -289,6 +291,7 @@ model User {
   updatedAt         DateTime @updatedAt
   role Role @default(STUDENT)
   @@index([schoolId])
+  @@index([schoolId, role, deletedAt])
 }
 
 // --- RBAC ---
@@ -356,6 +359,7 @@ model Kinship {
   updatedAt       DateTime      @updatedAt
 
   @@unique([studentId, parentId])
+  @@index([parentId])
 }
 
 
@@ -472,6 +476,8 @@ model Challan {
   canceledByChallan Challan? @relation("ChallanCancellation")
 
   @@index([studentId])
+  @@index([schoolId, status])
+  @@index([schoolId, status, updatedAt])
 }
 
 model ChallanItem {
@@ -723,6 +729,7 @@ model ExamResult {
   updatedAt      DateTime @updatedAt
 
   @@unique([examId, studentId, subjectId])
+  @@index([examId, classId])
 }
 
 // NEW: Stores the specific mark for a specific question
@@ -800,6 +807,8 @@ model Attendance {
   @@index([date])
   @@index([studentId])
   @@index([sectionId])
+  @@index([schoolId, date])
+  @@index([schoolId])
 }
 
 model SubjectAssignment {

@@ -118,8 +118,12 @@ export async function POST(request: Request) {
             });
         });
 
-        // 6. Execute Transaction
-        await prisma.$transaction(invoiceOperations);
+        // 6. Execute Transaction in safe chunks of 25 to avoid connection holding and transaction timeouts
+        const CHUNK_SIZE = 25;
+        for (let i = 0; i < invoiceOperations.length; i += CHUNK_SIZE) {
+            const chunk = invoiceOperations.slice(i, i + CHUNK_SIZE);
+            await prisma.$transaction(chunk);
+        }
 
         return NextResponse.json({
             success: true,

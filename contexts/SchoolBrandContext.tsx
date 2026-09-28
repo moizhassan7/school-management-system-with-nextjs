@@ -47,7 +47,7 @@ export function SchoolBrandProvider({ children }: { children: React.ReactNode })
   const refreshBrand = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/branding', { cache: 'no-store' });
+      const res = await fetch('/api/branding');
       if (res.ok) {
         const data = await res.json();
         setBrand({
@@ -69,8 +69,13 @@ export function SchoolBrandProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (status === 'loading') return;
+    const currentSchoolId = session?.user?.schoolId;
+    if (brand.id && currentSchoolId && brand.id === currentSchoolId) {
+      setIsLoading(false);
+      return;
+    }
     refreshBrand();
-  }, [refreshBrand, status, session?.user?.schoolId]);
+  }, [refreshBrand, status, session?.user?.schoolId, brand.id]);
 
   return (
     <SchoolBrandContext.Provider value={{ brand, isLoading, refreshBrand }}>

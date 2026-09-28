@@ -134,7 +134,7 @@ export async function GET(request: Request) {
       return NextResponse.json(processParent(parent));
     }
 
-    const [total, parents, outstandingParents] = await Promise.all([
+    const [total, parents, invoiceAgg, challanAgg] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
@@ -145,48 +145,38 @@ export async function GET(request: Request) {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      // Lean query for KPI total across all matching parents
-      prisma.user.findMany({
-        where,
-        select: {
-          parentRecord: {
-            select: {
-              students: {
-                select: {
-                  studentRecord: {
-                    select: {
-                      user: {
-                        select: {
-                          invoices: {
-                            where: { status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] } },
-                            select: { totalAmount: true, paidAmount: true },
-                          },
-                          challans: {
-                            where: { status: 'PENDING' },
-                            select: { totalAmount: true, paidAmount: true },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
+      !q
+        ? prisma.invoice.aggregate({
+            where: {
+              ...schoolScope(session),
+              status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] },
             },
-          },
-        },
-      }),
+            _sum: { totalAmount: true, paidAmount: true },
+          })
+        : Promise.resolve(null),
+      !q
+        ? prisma.challan.aggregate({
+            where: {
+              ...schoolScope(session),
+              status: 'PENDING',
+            },
+            _sum: { totalAmount: true, paidAmount: true },
+          })
+        : Promise.resolve(null),
     ]);
 
     const processedParents = parents.map(processParent);
 
-    const totalOutstanding = outstandingParents.reduce((sum, parent) => {
-      const kids = parent.parentRecord?.students || [];
-      const familyDue = kids.reduce((childSum, kinship) => {
-        const user = kinship.studentRecord.user;
-        return childSum + dueSum(user.invoices) + dueSum(user.challans);
-      }, 0);
-      return sum + familyDue;
-    }, 0);
+    let totalOutstanding = 0;
+    if (invoiceAgg && challanAgg) {
+      const invoiceDue =
+        Number(invoiceAgg._sum.totalAmount || 0) - Number(invoiceAgg._sum.paidAmount || 0);
+      const challanDue =
+        Number(challanAgg._sum.totalAmount || 0) - Number(challanAgg._sum.paidAmount || 0);
+      totalOutstanding = Math.max(invoiceDue + challanDue, 0);
+    } else {
+      totalOutstanding = processedParents.reduce((sum, p) => sum + (p.totalFamilyDue || 0), 0);
+    }
 
     return NextResponse.json({
       data: processedParents,

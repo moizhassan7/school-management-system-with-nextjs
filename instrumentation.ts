@@ -1,6 +1,6 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { schedulePasswordUpgrade } = await import('@/lib/password-upgrade');
-    schedulePasswordUpgrade();
-  }
+  // Startup hooks.
+  // Note: Password upgrades are handled lazily upon user login in auth.ts
+  // or via offline CLI script: npm run tsx scripts/upgrade-passwords.ts
 }
+

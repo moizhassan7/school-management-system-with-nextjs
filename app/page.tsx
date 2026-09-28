@@ -39,7 +39,7 @@ async function getAdminStats(schoolId: string) {
     // Unpaid Invoices Total
     prisma.invoice.aggregate({
       where: {
-        student: { schoolId },
+        schoolId,
         status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] }
       },
       _sum: {
@@ -104,7 +104,7 @@ async function getAccountantStats(schoolId: string) {
     // Total Revenue (Paid invoices)
     prisma.invoice.aggregate({
       where: {
-        student: { schoolId },
+        schoolId,
         status: 'PAID'
       },
       _sum: { totalAmount: true }
@@ -113,7 +113,7 @@ async function getAccountantStats(schoolId: string) {
     // Pending Payments
     prisma.invoice.aggregate({
       where: {
-        student: { schoolId },
+        schoolId,
         status: { in: ['UNPAID', 'PARTIAL', 'OVERDUE'] }
       },
       _sum: { totalAmount: true, paidAmount: true }
@@ -122,7 +122,7 @@ async function getAccountantStats(schoolId: string) {
     // Collected Today
     prisma.challan.aggregate({
       where: {
-        student: { schoolId },
+        schoolId,
         status: 'PAID',
         updatedAt: {
           gte: new Date(new Date().setHours(0, 0, 0, 0))
@@ -134,7 +134,7 @@ async function getAccountantStats(schoolId: string) {
     // Overdue Invoices Count
     prisma.invoice.count({
       where: {
-        student: { schoolId },
+        schoolId,
         status: 'OVERDUE'
       }
     }),
@@ -142,7 +142,7 @@ async function getAccountantStats(schoolId: string) {
     // Recent Payments
     prisma.challan.findMany({
       where: {
-        student: { schoolId },
+        schoolId,
         status: 'PAID'
       },
       orderBy: { updatedAt: 'desc' },

@@ -26,11 +26,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const dynamic = "force-dynamic";
+import { cache } from "react";
 
-async function resolveSchoolTitle(): Promise<string> {
+const getSession = cache(async () => {
+  return auth();
+});
+
+const resolveSchoolTitle = cache(async (): Promise<string> => {
   try {
-    const session = await auth();
+    const session = await getSession();
     const schoolId = session?.user?.schoolId;
     const school = schoolId
       ? await prisma.school.findFirst({
@@ -46,7 +50,7 @@ async function resolveSchoolTitle(): Promise<string> {
   } catch {
     return "School Management System";
   }
-}
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const title = await resolveSchoolTitle();
@@ -61,7 +65,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const session = await getSession();
 
   const user = session?.user || { name: "Guest", role: "GUEST", email: "" };
 

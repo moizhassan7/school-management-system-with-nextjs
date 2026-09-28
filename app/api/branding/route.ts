@@ -56,15 +56,22 @@ export async function GET() {
       return NextResponse.json(FALLBACK);
     }
 
-    return NextResponse.json({
-      id: school.id,
-      name: school.name,
-      initials: school.initials,
-      logoPath: school.logoPath || FALLBACK.logoPath,
-      address: school.address,
-      email: school.email,
-      phone: school.phone,
-    });
+    return NextResponse.json(
+      {
+        id: school.id,
+        name: school.name,
+        initials: school.initials,
+        logoPath: school.logoPath || FALLBACK.logoPath,
+        address: school.address,
+        email: school.email,
+        phone: school.phone,
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+        },
+      }
+    );
   } catch (error) {
     console.error('Branding fetch failed:', error);
     return NextResponse.json(FALLBACK);
