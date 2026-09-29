@@ -30,6 +30,8 @@ export default function FinanceConfigPage() {
   const [feeStructures, setFeeStructures] = useState<Record<string, number>>({});
   const [selectedStructureHeadIds, setSelectedStructureHeadIds] = useState<string[]>([]);
   const [selectedStructureHeadToAdd, setSelectedStructureHeadToAdd] = useState('');
+  const [isDeletingHeadId, setIsDeletingHeadId] = useState<string | null>(null);
+  const [isSavingStructure, setIsSavingStructure] = useState(false);
 
   const allClasses = schools.flatMap((school) =>
     school.campuses.flatMap((campus) => campus.classGroups.flatMap((group) => group.classes || []))
@@ -104,28 +106,45 @@ export default function FinanceConfigPage() {
   };
 
   const handleSaveStructure = async () => {
-    if (!selectedClassId) return;
-    const entriesToSave = Object.entries(feeStructures).filter(([headId]) =>
-      selectedStructureHeadIds.includes(headId)
-    );
-
-    if (entriesToSave.length === 0) {
-      toast.error('Please add at least one fee head');
+    if (!selectedClassId) {
+      toast.error('Please select a class first');
       return;
     }
 
-    for (const [headId, amount] of entriesToSave) {
-      await fetch('/api/finance/fee-structures', {
+    const entriesToSave = selectedStructureHeadIds.map((headId) => ({
+      feeHeadId: headId,
+      amount: Number(feeStructures[headId]) || 0,
+    }));
+
+    try {
+      setIsSavingStructure(true);
+      const res = await fetch('/api/finance/fee-structures', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           classId: selectedClassId,
-          feeHeadId: headId,
-          amount: Number(amount),
           schoolId: schools[0]?.id,
+          structures: entriesToSave,
         }),
       });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || 'Failed to save fee structure');
+        return;
+      }
+
+      toast.success(
+        entriesToSave.length === 0
+          ? 'Class fee structure cleared'
+          : 'Fee structure saved successfully'
+      );
+    } catch (err) {
+      console.error('Failed to save fee structure:', err);
+      toast.error('Network error saving fee structure');
+    } finally {
+      setIsSavingStructure(false);
     }
-    toast.success('Fee structure saved');
   };
 
   const handleAddStructureHead = () => {
@@ -140,13 +159,36 @@ export default function FinanceConfigPage() {
     setSelectedStructureHeadToAdd('');
   };
 
-  const handleRemoveStructureHead = (headId: string) => {
+  const handleRemoveStructureHead = async (headId: string) => {
+    // 1. Immediately update UI state
     setSelectedStructureHeadIds((prev) => prev.filter((id) => id !== headId));
     setFeeStructures((prev) => {
       const next = { ...prev };
       delete next[headId];
       return next;
     });
+
+    // 2. Call delete API to remove from database immediately
+    if (selectedClassId) {
+      try {
+        setIsDeletingHeadId(headId);
+        const res = await fetch(
+          `/api/finance/fee-structures?classId=${selectedClassId}&feeHeadId=${headId}`,
+          { method: 'DELETE' }
+        );
+        if (res.ok) {
+          toast.success('Fee head removed from class');
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast.error(err.error || 'Failed to remove fee head from class');
+        }
+      } catch (err) {
+        console.error('Failed to remove fee head:', err);
+        toast.error('Network error removing fee head');
+      } finally {
+        setIsDeletingHeadId(null);
+      }
+    }
   };
 
   return (
@@ -363,7 +405,7 @@ export default function FinanceConfigPage() {
 
             <div className="max-w-md space-y-2">
               <Label>Select Class</Label>
-              <Select onValueChange={setSelectedClassId}>
+              <Select value={selectedClassId} onValueChange={setSelectedClassId}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Choose Class..." />
                 </SelectTrigger>
@@ -442,10 +484,12 @@ export default function FinanceConfigPage() {
                               type="button"
                               variant="ghost"
                               size="icon"
+                              disabled={isDeletingHeadId === head.id}
                               onClick={() => handleRemoveStructureHead(head.id)}
-                              className="cursor-pointer rounded-xl"
+                              className="cursor-pointer rounded-xl hover:bg-destructive/10"
+                              title="Remove fee head from this class"
                             >
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                              <Trash2 className={`h-4 w-4 text-destructive ${isDeletingHeadId === head.id ? 'opacity-40 animate-pulse' : ''}`} />
                             </Button>
                           </div>
                         </div>
@@ -455,8 +499,12 @@ export default function FinanceConfigPage() {
                 )}
 
                 <div className="flex justify-end pt-2">
-                  <Button onClick={handleSaveStructure} className="w-40 cursor-pointer rounded-xl gap-2">
-                    <Save className="h-4 w-4" /> Save
+                  <Button
+                    onClick={handleSaveStructure}
+                    disabled={isSavingStructure}
+                    className="w-40 cursor-pointer rounded-xl gap-2 shadow-sm"
+                  >
+                    <Save className="h-4 w-4" /> {isSavingStructure ? 'Saving...' : 'Save'}
                   </Button>
                 </div>
               </div>

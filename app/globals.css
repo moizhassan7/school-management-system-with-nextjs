@@ -281,7 +281,9 @@
   }
 
   .challan-print-root,
-  .challan-print-root * {
+  .challan-print-root *,
+  .report-print-root,
+  .report-print-root * {
     visibility: visible !important;
   }
 
@@ -295,6 +297,18 @@
     display: flex;
     justify-content: center;
     align-items: flex-start;
+  }
+
+  .report-print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 6mm !important;
+    display: block !important;
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
   .challan-sheet {
@@ -313,5 +327,21 @@
     height: 100%;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  .challan-print-batch {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .challan-print-batch .challan-sheet {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .challan-print-batch .challan-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 }

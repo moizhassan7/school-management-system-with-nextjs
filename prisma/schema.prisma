@@ -218,6 +218,7 @@ model StudentRecord {
 
   @@unique([schoolId, admissionNumber])
   @@index([classId])
+  @@index([classId, sectionId])
   @@index([sectionId])
   @@index([schoolId])
 }
@@ -292,6 +293,7 @@ model User {
   role Role @default(STUDENT)
   @@index([schoolId])
   @@index([schoolId, role, deletedAt])
+  @@index([schoolId, deletedAt, createdAt])
 }
 
 // --- RBAC ---
@@ -576,6 +578,7 @@ model Invoice {
   updatedAt     DateTime      @updatedAt
 
   @@index([schoolId, status])
+  @@index([schoolId, createdAt])
   @@index([studentId, month, year])
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { requirePermission, schoolScope, stripSecrets } from '@/lib/authz';
+import { pageMeta, parsePagination } from '@/lib/pagination';
 
 export async function GET(request: Request) {
   try {
@@ -9,8 +10,14 @@ export async function GET(request: Request) {
     if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, Number(searchParams.get('page') || 1));
-    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 25)));
+    const all = searchParams.get('all') === '1';
+    const parsed = parsePagination(searchParams, {
+      defaultPageSize: all ? 500 : 25,
+      maxPageSize: all ? 500 : 100,
+      minPageSize: all ? 1 : 10,
+    });
+    const page = all ? 1 : parsed.page;
+    const pageSize = parsed.pageSize;
     const q = searchParams.get('q')?.trim() || '';
     const classGroupId = searchParams.get('classGroupId')?.trim() || '';
     const classId = searchParams.get('classId')?.trim() || '';
@@ -61,34 +68,28 @@ export async function GET(request: Request) {
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
-        include: {
-          school: {
-            select: {
-              name: true,
-              initials: true,
-            },
-          },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          suspended: true,
+          schoolId: true,
           studentRecord: {
-            include: {
-              myClass: true,
-              section: true,
+            select: {
+              id: true,
+              admissionNumber: true,
+              rollNumber: true,
+              classId: true,
+              myClass: { select: { id: true, name: true } },
+              section: { select: { id: true, name: true } },
               parents: {
-                include: {
+                select: {
+                  relationship: true,
                   parentRecord: {
-                    include: {
-                      user: { select: { name: true } },
-                    },
+                    select: { user: { select: { name: true } } },
                   },
                 },
-              },
-              academicYearRecords: {
-                include: {
-                  academicYear: true,
-                },
-                orderBy: {
-                  createdAt: 'desc',
-                },
-                take: 1,
               },
             },
           },
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
         orderBy: {
           createdAt: 'desc',
         },
-        skip: (page - 1) * pageSize,
+        skip: all ? 0 : (page - 1) * pageSize,
         take: pageSize,
       }),
     ]);
@@ -104,10 +105,8 @@ export async function GET(request: Request) {
     return NextResponse.json(
       stripSecrets({
         data: students,
-        page,
-        pageSize,
-        total,
-        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        ...pageMeta(page, pageSize, total),
+        truncated: all && total > students.length,
       })
     );
   } catch (error) {

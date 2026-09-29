@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { prisma } from '@/lib/prisma';
 import DashboardHeader from '@/components/dashboard-header';
 import AdminDashboard from '@/components/dashboards/admin-dashboard';
@@ -8,6 +9,7 @@ import TeacherDashboard from '@/components/dashboards/teacher-dashboard';
 import StudentDashboard from '@/components/dashboards/student-dashboard';
 import ParentDashboard from '@/components/dashboards/parent-dashboard';
 import StaffDashboard from '@/components/dashboards/staff-dashboard';
+import Loading from './loading';
 
 // Admin/Super Admin Dashboard Stats
 async function getAdminStats(schoolId: string) {
@@ -485,20 +487,18 @@ async function getStaffStats(userId: string, schoolId: string) {
   };
 }
 
-export default async function Dashboard() {
-  const session = await auth();
-
-  if (!session?.user) {
-    redirect('/login');
-  }
-
-  // Fetch dashboard data directly from database
+async function DashboardBody({
+  role,
+  schoolId,
+  userId,
+}: {
+  role: string | undefined;
+  schoolId: string | undefined;
+  userId: string | undefined;
+}) {
   let dashboardData;
 
   try {
-    const { role, schoolId, id: userId } = session.user;
-
-    // Different stats based on role
     switch (role) {
       case 'SUPER_ADMIN':
       case 'ADMIN':
@@ -535,10 +535,38 @@ export default async function Dashboard() {
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     dashboardData = {
-      role: session.user.role,
+      role,
       stats: {},
       message: 'Failed to load dashboard data'
     };
+  }
+
+  return (
+    <>
+      {(role === 'SUPER_ADMIN' || role === 'ADMIN') && <AdminDashboard data={dashboardData} />}
+      {role === 'ACCOUNTANT' && <AccountantDashboard data={dashboardData} />}
+      {role === 'TEACHER' && <TeacherDashboard data={dashboardData} />}
+      {role === 'STUDENT' && <StudentDashboard data={dashboardData} />}
+      {role === 'PARENT' && <ParentDashboard data={dashboardData} />}
+      {role === 'STAFF' && <StaffDashboard data={dashboardData} />}
+
+      {!['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'STUDENT', 'PARENT', 'STAFF'].includes(role || '') && (
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h2>
+            <p className="text-slate-500">Your role does not have access to this dashboard.</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default async function Dashboard() {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect('/login');
   }
 
   const role = session.user.role;
@@ -548,24 +576,13 @@ export default async function Dashboard() {
   return (
     <div className="flex h-full min-h-screen flex-col bg-transparent">
       <DashboardHeader user={{ name: userName, email: userEmail, role }} />
-
-      {/* Render role-specific dashboard */}
-      {(role === 'SUPER_ADMIN' || role === 'ADMIN') && <AdminDashboard data={dashboardData} />}
-      {role === 'ACCOUNTANT' && <AccountantDashboard data={dashboardData} />}
-      {role === 'TEACHER' && <TeacherDashboard data={dashboardData} />}
-      {role === 'STUDENT' && <StudentDashboard data={dashboardData} />}
-      {role === 'PARENT' && <ParentDashboard data={dashboardData} />}
-      {role === 'STAFF' && <StaffDashboard data={dashboardData} />}
-
-      {/* Fallback for unknown roles */}
-      {!['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT', 'TEACHER', 'STUDENT', 'PARENT', 'STAFF'].includes(role || '') && (
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Access Denied</h2>
-            <p className="text-slate-500">Your role does not have access to this dashboard.</p>
-          </div>
-        </div>
-      )}
+      <Suspense fallback={<Loading />}>
+        <DashboardBody
+          role={role}
+          schoolId={session.user.schoolId}
+          userId={session.user.id}
+        />
+      </Suspense>
     </div>
   );
 }

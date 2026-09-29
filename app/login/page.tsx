@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useEffect, useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { authenticate } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import Image from 'next/image';
 import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
 
 export default function LoginPage() {
-  const [errorMessage, dispatch] = useFormState(authenticate, undefined);
+  const [errorMessage, dispatch] = useActionState(authenticate, undefined);
   const { brand } = useSchoolBrand();
 
   useEffect(() => {
@@ -38,7 +38,8 @@ export default function LoginPage() {
               alt={brand.name}
               width={36}
               height={36}
-              className="h-9 w-9 object-contain"
+              className="object-contain"
+              style={{ width: 36, height: 36 }}
               priority
               unoptimized={brand.logoPath?.startsWith('/uploads/')}
             />

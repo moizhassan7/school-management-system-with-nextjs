@@ -53,6 +53,7 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
     () => pathname.startsWith('/finance') || pathname.startsWith('/parents')
   );
   const [isExamsExpanded, setIsExamsExpanded] = useState(() => pathname.startsWith('/exams'));
+  const [isReportsExpanded, setIsReportsExpanded] = useState(() => pathname.startsWith('/reports'));
 
   const isActive = (path: string) => pathname === path;
   const isPathActive = (path: string) => pathname.startsWith(path);
@@ -63,6 +64,7 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
   const canFees = can(user, 'FEES', 'VIEW');
   const canExams = can(user, 'EXAMS', 'VIEW');
   const canAttendance = can(user, 'ATTENDANCE', 'VIEW');
+  const canReports = can(user, 'REPORTS', 'VIEW');
   const canConfig = can(user, 'CONFIGURATION', 'VIEW');
   const canUsers = can(user, 'USERS', 'VIEW');
   const isStudent = userRole === 'STUDENT';
@@ -103,7 +105,8 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
             alt={`${brand.name} Logo`}
             width={28}
             height={28}
-            className="h-7 w-7 object-contain"
+            className="shrink-0 object-contain"
+            style={{ width: 28, height: 28 }}
             priority
             unoptimized={brand.logoPath?.startsWith('/uploads/')}
           />
@@ -231,6 +234,9 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
                 <Link href="/finance/invoices" className={subLinkClass(isActive('/finance/invoices'))} onClick={go}>
                   <FileText className="h-3.5 w-3.5" /> Invoices
                 </Link>
+                <Link href="/finance/invoices/print" className={subLinkClass(isActive('/finance/invoices/print'))} onClick={go}>
+                  <FileText className="h-3.5 w-3.5" /> Print Class Challans
+                </Link>
                 <Link href="/finance/collect" className={subLinkClass(isActive('/finance/collect'))} onClick={go}>
                   <CreditCard className="h-3.5 w-3.5" /> Collect Fees
                 </Link>
@@ -304,6 +310,63 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
           </div>
         )}
 
+        {canReports && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsReportsExpanded(!isReportsExpanded)}
+              className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                isPathActive('/reports')
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span className="flex-1 text-left">Reports</span>
+              {isReportsExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            {isReportsExpanded && (
+              <div className="mt-1 ml-4 space-y-1 border-l border-border pl-3">
+                <Link
+                  href="/reports"
+                  className={subLinkClass(isActive('/reports') || isActive('/reports/students'))}
+                  onClick={go}
+                >
+                  <Users className="h-3.5 w-3.5" /> Student Information
+                </Link>
+                {(canFees || canReports) && (
+                  <Link href="/reports/fees" className={subLinkClass(isActive('/reports/fees'))} onClick={go}>
+                    <Banknote className="h-3.5 w-3.5" /> Fee Reports
+                  </Link>
+                )}
+                {canExams && (
+                  <>
+                    <Link
+                      href="/exams/results/gazette"
+                      className={subLinkClass(isActive('/exams/results/gazette'))}
+                      onClick={go}
+                    >
+                      <FileText className="h-3.5 w-3.5" /> Results Gazette
+                    </Link>
+                    <Link
+                      href="/exams/results/report-card"
+                      className={subLinkClass(isActive('/exams/results/report-card'))}
+                      onClick={go}
+                    >
+                      <FileBarChart className="h-3.5 w-3.5" /> Report Cards
+                    </Link>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {(canUsers || canConfig) && (
           <div className="pt-4">
             <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
@@ -361,7 +424,7 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
 /** Desktop sticky sidebar — hidden on small screens where the sheet is used. */
 export default function Sidebar({ user }: { user: NavUser }) {
   return (
-    <div className="sticky top-0 z-20 hidden h-screen shrink-0 md:block">
+    <div className="sticky top-0 z-20 hidden h-screen shrink-0 md:block print:hidden">
       <AppNav user={user} className="flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground" />
     </div>
   );

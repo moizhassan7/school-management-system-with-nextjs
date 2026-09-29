@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
+import { pageMeta, parsePagination } from '@/lib/pagination';
 
 // GET: Fetch all class tests
 export async function GET(request: NextRequest) {
@@ -30,26 +31,46 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const exams = await prisma.exam.findMany({
-      where: {
-        schoolId: session.user.schoolId!,
-        type: 'CLASS_TEST',
-        ...teacherFilter
-      },
-      include: {
-        configurations: {
-          include: {
-            subject: true,
-            myClass: true
-          }
-        }
-      },
-      orderBy: {
-        startDate: 'desc'
-      }
+    const { searchParams } = new URL(request.url);
+    const { page, pageSize, skip } = parsePagination(searchParams, {
+      defaultPageSize: 9,
+      maxPageSize: 48,
+      minPageSize: 6,
     });
 
-    const mappedTests = exams.map(exam => {
+    const where = {
+      schoolId: session.user.schoolId!,
+      type: 'CLASS_TEST' as const,
+      ...teacherFilter,
+    };
+
+    const [total, exams] = await Promise.all([
+      prisma.exam.count({ where }),
+      prisma.exam.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          startDate: true,
+          configurations: {
+            take: 1,
+            select: {
+              subjectId: true,
+              classId: true,
+              maxMarks: true,
+              passMarks: true,
+              subject: { select: { id: true, name: true, code: true } },
+              myClass: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: { startDate: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    const mappedTests = exams.map((exam) => {
       const config = exam.configurations[0];
       return {
         id: exam.id,
@@ -62,11 +83,14 @@ export async function GET(request: NextRequest) {
         description: null,
         subject: config?.subject,
         class: config?.myClass,
-        teacher: null
+        teacher: null,
       };
     });
 
-    return NextResponse.json(mappedTests);
+    return NextResponse.json({
+      data: mappedTests,
+      ...pageMeta(page, pageSize, total),
+    });
   } catch (error) {
     console.error('Error fetching class tests:', error);
     return NextResponse.json({ error: 'Failed to fetch class tests' }, { status: 500 });

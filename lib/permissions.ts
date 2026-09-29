@@ -52,6 +52,7 @@ export const PATH_MODULE_MAP: { prefix: string; module: ModuleKey }[] = [
   { prefix: '/attendance', module: 'ATTENDANCE' },
   { prefix: '/exams', module: 'EXAMS' },
   { prefix: '/finance', module: 'FEES' },
+  { prefix: '/reports', module: 'REPORTS' },
 ];
 
 type AuthUser = {

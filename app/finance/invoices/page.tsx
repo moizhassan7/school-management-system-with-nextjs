@@ -166,6 +166,11 @@ export default function InvoicesPage() {
                     <p className="mt-1 text-muted-foreground">Manage student fee invoices and track payment status.</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <Link href="/finance/invoices/print">
+                        <Button variant="outline" className="cursor-pointer gap-2 font-semibold">
+                            <FileText className="h-4 w-4" /> Print Class
+                        </Button>
+                    </Link>
                     <Link href="/finance/invoices/custom">
                         <Button variant="outline" className="cursor-pointer gap-2 font-semibold">
                             <FileText className="h-4 w-4" /> Custom Challan

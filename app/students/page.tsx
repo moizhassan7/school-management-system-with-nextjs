@@ -8,6 +8,7 @@ import {
   Phone,
   MoreVertical,
   FileUp,
+  FileSpreadsheet,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,7 @@ export default function StudentsPage() {
   const [sectionId, setSectionId] = useState('');
 
   useEffect(() => {
-    fetch('/api/class-groups')
+    fetch('/api/class-groups?view=options')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setClassGroups(data);
@@ -159,7 +160,12 @@ export default function StudentsPage() {
             Search by student ID, name, father name, or roll number — or filter by class.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2.5">
+          <Link href="/reports">
+            <Button variant="outline" className="cursor-pointer gap-2 font-semibold border-primary/30 text-primary hover:bg-primary/5">
+              <FileSpreadsheet className="h-4 w-4" /> Class Reports
+            </Button>
+          </Link>
           <Button variant="outline" className="cursor-pointer gap-2 font-semibold">
             <FileUp className="h-4 w-4" /> Import
           </Button>

@@ -48,7 +48,9 @@ interface ReportCard {
 }
 
 export default function ReportCardPage() {
-  const [students, setStudents] = useState<Student[]>([]);
+  const [studentQuery, setStudentQuery] = useState('');
+  const [studentOptions, setStudentOptions] = useState<{ id: string; label: string }[]>([]);
+  const [selectedStudentLabel, setSelectedStudentLabel] = useState('');
   const [reportCard, setReportCard] = useState<ReportCard | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedExamId, setSelectedExamId] = useState('');
@@ -68,19 +70,41 @@ export default function ReportCardPage() {
 
   const fetchInitialData = async () => {
     try {
-      const [studentsRes, examsRes] = await Promise.all([
-        fetch('/api/students'),
-        fetch('/api/exams')
-      ]);
-
-      if (studentsRes.ok) setStudents(await studentsRes.json());
+      const examsRes = await fetch('/api/exams');
       if (examsRes.ok) setExams(await examsRes.json());
-    } catch (error) {
-      toast.error('Failed to fetch initial data');
+    } catch {
+      toast.error('Failed to fetch exams');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const term = studentQuery.trim();
+    if (term.length < 2) {
+      setStudentOptions([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetch(`/api/students?q=${encodeURIComponent(term)}&pageSize=10`)
+        .then((res) => res.json())
+        .then((payload) => {
+          const rows = Array.isArray(payload) ? payload : payload.data || [];
+          setStudentOptions(
+            rows.map((student: { id: string; name?: string; studentRecord?: { rollNumber?: string | null; admissionNumber?: string | null; myClass?: { name?: string } } }) => {
+              const roll = student.studentRecord?.rollNumber || student.studentRecord?.admissionNumber || '—';
+              const className = student.studentRecord?.myClass?.name || 'Unassigned';
+              return {
+                id: student.id,
+                label: `${roll} — ${student.name || 'Student'} (${className})`,
+              };
+            })
+          );
+        })
+        .catch(() => setStudentOptions([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [studentQuery]);
 
   const generateReportCard = async () => {
     if (!selectedStudentId || !selectedExamId) return;
@@ -156,18 +180,35 @@ export default function ReportCardPage() {
                 <User className="inline h-4 w-4 mr-1" />
                 Student
               </label>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
+              <input
+                value={selectedStudentId ? selectedStudentLabel : studentQuery}
+                onChange={(e) => {
+                  setSelectedStudentId('');
+                  setSelectedStudentLabel('');
+                  setStudentQuery(e.target.value);
+                }}
+                placeholder="Search by name, roll, or admission number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Student</option>
-                {students.map(student => (
-                  <option key={student.id} value={student.id}>
-                    {student.rollNumber} - {student.firstName} {student.lastName} ({student.className})
-                  </option>
-                ))}
-              </select>
+              />
+              {!selectedStudentId && studentOptions.length > 0 && (
+                <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-gray-200 bg-white">
+                  {studentOptions.map((student) => (
+                    <li key={student.id}>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                        onClick={() => {
+                          setSelectedStudentId(student.id);
+                          setSelectedStudentLabel(student.label);
+                          setStudentOptions([]);
+                        }}
+                      >
+                        {student.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div>

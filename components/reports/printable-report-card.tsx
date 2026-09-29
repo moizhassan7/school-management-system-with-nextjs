@@ -22,7 +22,8 @@ export default function PrintableReportCard({ student, examName, className }: Re
                         alt={brand.name}
                         width={48}
                         height={48}
-                        className="h-12 w-12 object-contain"
+                        className="shrink-0 object-contain"
+                        style={{ width: 48, height: 48 }}
                         unoptimized={brand.logoPath?.startsWith("/uploads/")}
                     />
                 </div>

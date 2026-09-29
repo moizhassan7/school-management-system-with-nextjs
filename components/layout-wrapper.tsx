@@ -37,7 +37,7 @@ export default function LayoutWrapper({
       <Sidebar user={activeUser} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur md:hidden print:hidden">
           <Button
             type="button"
             variant="outline"

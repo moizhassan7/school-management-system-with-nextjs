@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 
 // 1. Define Types matching the Deep Hierarchy
 export interface ClassItem {
@@ -37,13 +38,13 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
+    const { status } = useSession();
     const [schools, setSchools] = useState<SchoolWithHierarchy[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const refreshData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Because we updated the API, this single call gets the whole tree
             const response = await fetch('/api/schools?view=nav');
             if (response.ok) {
                 const data = await response.json();
@@ -57,8 +58,13 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
+        if (status !== 'authenticated') {
+            setSchools([]);
+            setIsLoading(status === 'loading');
+            return;
+        }
         refreshData();
-    }, [refreshData]);
+    }, [refreshData, status]);
 
     return (
         <SidebarContext.Provider value={{ schools, refreshData, isLoading }}>

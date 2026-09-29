@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Search, Save, User, Calendar, Users, CheckCircle, XCircle, Edit } from 'lucide-react';
+import { ListPagination } from '@/components/list-pagination';
 
 interface ClassTest {
   id?: string;
@@ -47,6 +48,9 @@ interface ClassTestResult {
 export default function ClassTestsPage() {
   const router = useRouter();
   const [classTests, setClassTests] = useState<ClassTest[]>([]);
+  const [testPage, setTestPage] = useState(1);
+  const [testTotal, setTestTotal] = useState(0);
+  const testPageSize = 9;
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -71,8 +75,33 @@ export default function ClassTestsPage() {
   });
 
   useEffect(() => {
-    fetchInitialData();
+    Promise.all([fetch('/api/subjects'), fetch('/api/classes')])
+      .then(async ([subjectsRes, classesRes]) => {
+        if (subjectsRes.ok) setSubjects(await subjectsRes.json());
+        if (classesRes.ok) setClasses(await classesRes.json());
+      })
+      .catch(() => toast.error('Failed to fetch subjects and classes'));
   }, []);
+
+  const fetchInitialData = useCallback(async () => {
+    try {
+      const testsRes = await fetch(`/api/exams/class-tests?page=${testPage}&pageSize=${testPageSize}`);
+      if (testsRes.ok) {
+        const payload = await testsRes.json();
+        const rows = Array.isArray(payload) ? payload : payload.data || [];
+        setClassTests(rows);
+        setTestTotal(Array.isArray(payload) ? rows.length : Number(payload.total) || rows.length);
+      }
+    } catch {
+      toast.error('Failed to fetch class tests');
+    } finally {
+      setLoading(false);
+    }
+  }, [testPage]);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, [fetchInitialData]);
 
   useEffect(() => {
     if (selectedTest) {
@@ -80,35 +109,28 @@ export default function ClassTestsPage() {
     }
   }, [selectedTest]);
 
-  const fetchInitialData = async () => {
-    try {
-      const [testsRes, subjectsRes, classesRes] = await Promise.all([
-        fetch('/api/exams/class-tests'),
-        fetch('/api/subjects'),
-        fetch('/api/classes')
-      ]);
-
-      if (testsRes.ok) setClassTests(await testsRes.json());
-      if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (classesRes.ok) setClasses(await classesRes.json());
-    } catch (error) {
-      toast.error('Failed to fetch initial data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchStudentsAndResults = async () => {
     if (!selectedTest) return;
 
     try {
       const [studentsRes, resultsRes] = await Promise.all([
-        fetch(`/api/students?classId=${selectedTest.classId}`),
+        fetch(`/api/students?classId=${selectedTest.classId}&all=1`),
         fetch(`/api/exams/class-tests/${selectedTest.id}/results`)
       ]);
 
       if (studentsRes.ok) {
-        const studentsData = await studentsRes.json();
+        const payload = await studentsRes.json();
+        const rows = Array.isArray(payload) ? payload : payload.data || [];
+        const studentsData: Student[] = rows.map((student: { id: string; name?: string; studentRecord?: { rollNumber?: string | null } }) => {
+          const name = String(student.name || '').trim();
+          const parts = name.split(/\s+/);
+          return {
+            id: student.id,
+            rollNumber: student.studentRecord?.rollNumber || '',
+            firstName: parts[0] || name,
+            lastName: parts.slice(1).join(' '),
+          };
+        });
         setStudents(studentsData);
 
         // Initialize results for all students
@@ -487,6 +509,17 @@ export default function ClassTestsPage() {
               </div>
             )}
           </div>
+          {testTotal > 0 && (
+            <div className="mt-6">
+              <ListPagination
+                page={testPage}
+                pageSize={testPageSize}
+                total={testTotal}
+                onPageChange={setTestPage}
+                disabled={loading}
+              />
+            </div>
+          )}
         </div>
 
         {/* Results Entry */}
