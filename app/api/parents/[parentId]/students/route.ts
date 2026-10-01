@@ -60,7 +60,11 @@ export async function GET(
   if (denied) return denied;
 
   const kinships = await prisma.kinship.findMany({
-    where: { parentId },
+    where: {
+      parentId,
+      studentRecord: { user: { deletedAt: null } },
+    },
+    orderBy: { studentRecord: { user: { name: 'asc' } } },
     include: {
       studentRecord: {
         include: {

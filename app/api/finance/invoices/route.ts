@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     prisma.invoice.findMany({
       where,
       include: { student: { select: { name: true, email: true } } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ student: { name: 'asc' } }, { year: 'desc' }, { month: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

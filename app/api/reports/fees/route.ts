@@ -100,7 +100,7 @@ export async function GET(request: Request) {
         },
       },
     },
-    orderBy: [{ year: 'desc' }, { month: 'desc' }, { student: { name: 'asc' } }],
+    orderBy: [{ student: { name: 'asc' } }, { year: 'desc' }, { month: 'desc' }],
     take: MAX_ROWS,
   });
 
@@ -198,9 +198,9 @@ export async function GET(request: Request) {
   }
 
   const rows = Array.from(byStudent.values()).sort((a, b) => {
-    const classCompare = a.className.localeCompare(b.className);
-    if (classCompare !== 0) return classCompare;
-    return a.studentName.localeCompare(b.studentName);
+    const nameCompare = a.studentName.localeCompare(b.studentName, undefined, { sensitivity: 'base' });
+    if (nameCompare !== 0) return nameCompare;
+    return a.className.localeCompare(b.className);
   });
 
   const totalOutstanding = rows.reduce((sum, row) => sum + row.outstanding, 0);

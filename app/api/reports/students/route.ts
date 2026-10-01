@@ -269,7 +269,7 @@ export async function GET(request: Request) {
       prisma.user.findMany({
         where,
         select: studentSelect,
-        orderBy: [{ studentRecord: { rollNumber: 'asc' } }, { name: 'asc' }],
+        orderBy: { name: 'asc' },
         skip: all ? 0 : (page - 1) * pageSize,
         take: pageSize,
       }),

@@ -2,11 +2,24 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { 
     ArrowLeft, User, Phone, Mail, MapPin, Calendar, 
-    BookOpen, GraduationCap, Users, Shield, Edit, Loader2 
+    BookOpen, GraduationCap, Users, Shield, Edit, Loader2, Trash2 
 } from 'lucide-react';
+import { can } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,9 +29,14 @@ import { toast } from 'sonner';
 
 export default function StudentProfilePage({ params }: { params: Promise<{ studentId: string }> }) {
     const { studentId } = use(params);
+    const router = useRouter();
+    const { data: session } = useSession();
+    const canDelete = can(session?.user, 'STUDENTS', 'DELETE');
     const [student, setStudent] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [reassignMode, setReassignMode] = useState<'KEEP_EXISTING' | 'SWITCH_TO_CLASS_DEFAULT'>('KEEP_EXISTING');
     const [isUpdatingFeeStructure, setIsUpdatingFeeStructure] = useState(false);
 
@@ -91,8 +109,47 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
         }
     };
 
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            const res = await fetch(`/api/students/${student.id}`, { method: 'DELETE' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to delete student');
+            }
+            toast.success(`${student.name} was removed`);
+            router.push('/students');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete student');
+            setDeleting(false);
+        }
+    };
+
     return (
         <div className="container mx-auto py-8 px-4 space-y-6">
+            <AlertDialog open={confirmingDelete} onOpenChange={(open) => !deleting && setConfirmingDelete(open)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {student.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This removes the student from directories, classes, attendance, and exam lists. Fee history stays on record.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={deleting}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                void handleDelete();
+                            }}
+                        >
+                            {deleting ? 'Deleting…' : 'Delete student'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
             
             {/* Header */}
             <div className="flex items-center gap-4">
@@ -101,6 +158,16 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                 </Link>
                 <h1 className="text-2xl font-bold text-slate-900">Student Profile</h1>
                 <div className="ml-auto flex gap-2">
+                    {canDelete && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="cursor-pointer text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => setConfirmingDelete(true)}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </Button>
+                    )}
                     <Link href={`/students/${student.id}/edit`}>
                          <Button variant="outline" className="cursor-pointer"><Edit className="mr-2 h-4 w-4"/> Edit Profile</Button>
                     </Link>

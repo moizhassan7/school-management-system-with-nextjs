@@ -269,3 +269,46 @@ export async function PUT(
     return NextResponse.json({ error: 'Failed to update student' }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ studentId: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!can(session.user, 'STUDENTS', 'DELETE')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { studentId } = await params;
+    const existing = await prisma.user.findUnique({
+      where: { id: studentId },
+      include: { studentRecord: { select: { id: true } } },
+    });
+
+    if (!existing || existing.deletedAt || !existing.studentRecord) {
+      return NextResponse.json({ error: 'Student not found' }, { status: 404 });
+    }
+
+    if (
+      session.user.role !== 'SUPER_ADMIN' &&
+      session.user.schoolId &&
+      existing.schoolId !== session.user.schoolId
+    ) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    await prisma.user.update({
+      where: { id: studentId },
+      data: { deletedAt: new Date(), suspended: true },
+    });
+
+    return NextResponse.json({ message: 'Student deleted' });
+  } catch (error) {
+    console.error('DELETE Student Error:', error);
+    return NextResponse.json({ error: 'Failed to delete student' }, { status: 500 });
+  }
+}

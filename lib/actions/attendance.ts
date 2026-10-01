@@ -65,7 +65,8 @@ export async function getSchoolSections(role: string, schoolId?: string | null) 
 export async function getSectionStudents(sectionId: string) {
   const students = await prisma.studentRecord.findMany({
     where: {
-      sectionId: sectionId,
+      sectionId,
+      user: { deletedAt: null },
     },
     include: {
       user: {

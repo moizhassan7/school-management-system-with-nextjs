@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
     // Get all students in the class
     const students = await prisma.studentRecord.findMany({
       where: {
-        classId: classId
+        classId,
+        user: { deletedAt: null },
       },
       select: {
         id: true,

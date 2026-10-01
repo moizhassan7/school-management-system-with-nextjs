@@ -328,6 +328,8 @@ async function getParentStats(userId: string, schoolId: string) {
     where: { userId },
     include: {
       students: {
+        where: { studentRecord: { user: { deletedAt: null } } },
+        orderBy: { studentRecord: { user: { name: 'asc' } } },
         include: {
           studentRecord: {
             include: {
@@ -402,6 +404,8 @@ async function getParentStats(userId: string, schoolId: string) {
       }))
     };
   });
+
+  children.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   return {
     role: 'PARENT',

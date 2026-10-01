@@ -94,9 +94,7 @@ export async function GET(request: Request) {
             },
           },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        orderBy: { name: 'asc' },
         skip: all ? 0 : (page - 1) * pageSize,
         take: pageSize,
       }),

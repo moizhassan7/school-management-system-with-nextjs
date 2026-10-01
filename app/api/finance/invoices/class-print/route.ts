@@ -76,7 +76,6 @@ export async function GET(request: Request) {
         },
       },
       orderBy: [
-        { student: { studentRecord: { rollNumber: 'asc' } } },
         { student: { name: 'asc' } },
         { year: 'asc' },
         { month: 'asc' },

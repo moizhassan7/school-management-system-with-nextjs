@@ -45,7 +45,7 @@ async function main() {
   });
   console.log(`🏫 Campus: ${campus.name}`);
 
-  const hashedPassword = await hashPassword('password123');
+  const  hashedPassword = await hashPassword('password123');
 
   const superAdmin = await prisma.user.upsert({
     where: { email: 'super@school.com' },

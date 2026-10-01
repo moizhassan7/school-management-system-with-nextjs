@@ -131,6 +131,11 @@ export default function ClassTestsPage() {
             lastName: parts.slice(1).join(' '),
           };
         });
+        studentsData.sort((a, b) =>
+          `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, undefined, {
+            sensitivity: 'base',
+          })
+        );
         setStudents(studentsData);
 
         // Initialize results for all students

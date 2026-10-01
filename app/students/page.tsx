@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
 import {
   Plus,
   Search,
@@ -9,9 +11,21 @@ import {
   MoreVertical,
   FileUp,
   FileSpreadsheet,
+  Trash2,
   X,
 } from 'lucide-react';
+import { can } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -52,8 +66,12 @@ function fatherNameOf(student: any): string {
 }
 
 export default function StudentsPage() {
+  const { data: session } = useSession();
+  const canDelete = can(session?.user, 'STUDENTS', 'DELETE');
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -122,13 +140,16 @@ export default function StudentsPage() {
     fetch(`/api/students?${params.toString()}`, { signal: controller.signal })
       .then((res) => res.json())
       .then((payload) => {
-        if (Array.isArray(payload)) {
-          setStudents(payload);
-          setTotal(payload.length);
-        } else {
-          setStudents(Array.isArray(payload.data) ? payload.data : []);
-          setTotal(Number(payload.total) || 0);
-        }
+        const rows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload.data)
+            ? payload.data
+            : [];
+        rows.sort((a: { name?: string }, b: { name?: string }) =>
+          String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+        );
+        setStudents(rows);
+        setTotal(Array.isArray(payload) ? rows.length : Number(payload.total) || 0);
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
@@ -147,6 +168,26 @@ export default function StudentsPage() {
     setClassGroupId('');
     setClassId('');
     setSectionId('');
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/students/${pendingDelete.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete student');
+      }
+      toast.success(`${pendingDelete.name} was removed`);
+      setStudents((current) => current.filter((student) => student.id !== pendingDelete.id));
+      setTotal((current) => Math.max(0, current - 1));
+      setPendingDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete student');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -380,16 +421,30 @@ export default function StudentsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="p-4 text-right">
-                        <Link href={`/students/${student.id}`}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-gray-400 hover:bg-gray-100 hover:text-primary"
-                            aria-label={`Open ${student.name}`}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                        <div className="flex items-center justify-end gap-1">
+                          {canDelete && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              aria-label={`Delete ${student.name}`}
+                              onClick={() => setPendingDelete({ id: student.id, name: student.name })}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Link href={`/students/${student.id}`}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-gray-400 hover:bg-gray-100 hover:text-primary"
+                              aria-label={`Open ${student.name}`}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -398,6 +453,30 @@ export default function StudentsPage() {
             </Table>
           </div>
         )}
+
+        <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && !deleting && setPendingDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {pendingDelete?.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the student from directories, classes, attendance, and exam lists. Fee history stays on record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deleting}
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={(event) => {
+                  event.preventDefault();
+                  void confirmDelete();
+                }}
+              >
+                {deleting ? 'Deleting…' : 'Delete student'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="px-4 pb-4">
           <ListPagination

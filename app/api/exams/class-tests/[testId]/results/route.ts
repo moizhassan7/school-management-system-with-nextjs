@@ -28,9 +28,7 @@ export async function GET(
           }
         }
       },
-      orderBy: {
-        createdAt: 'asc' // Best fallback since rollNumber is deep
-      }
+      orderBy: { student: { name: 'asc' } }
     });
 
     const mappedResults = results.map((r: any) => ({

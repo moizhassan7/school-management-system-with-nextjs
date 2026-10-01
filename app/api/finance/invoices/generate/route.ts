@@ -36,8 +36,10 @@ export async function POST(request: Request) {
 
         const students = await prisma.studentRecord.findMany({
             where: {
-                classId: classId,
+                classId,
+                user: { deletedAt: null },
             },
+            orderBy: { user: { name: 'asc' } },
             include: {
                 feeStructure: {
                     include: {

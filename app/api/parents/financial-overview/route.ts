@@ -16,6 +16,8 @@ function dueSum(items: InvoiceLike[]) {
 
 const childrenInclude = {
   students: {
+    where: { studentRecord: { user: { deletedAt: null } } },
+    orderBy: { studentRecord: { user: { name: 'asc' } } },
     include: {
       studentRecord: {
         include: {
@@ -77,6 +79,10 @@ function processParent(parent: {
         totalDue: childTotal,
       };
     }) || [];
+
+  childrenData.sort((a, b) =>
+    String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+  );
 
   return {
     id: parent.id,

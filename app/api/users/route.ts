@@ -99,7 +99,7 @@ export async function GET(request: Request) {
           },
           _count: { select: { userPermissions: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { name: 'asc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

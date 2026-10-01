@@ -70,7 +70,7 @@ export default function ResultsGazettePage() {
   
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'rollNumber' | 'percentage' | 'name'>('rollNumber');
+  const [sortBy, setSortBy] = useState<'rollNumber' | 'percentage' | 'name'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
