@@ -138,40 +138,59 @@ export async function POST(request: Request) {
         : [];
 
     const clearSubjectGroup = sourceClass.classGroupId !== targetClass.classGroupId;
+    const recordIds = records.map((record) => record.id);
 
-    const result = await prisma.$transaction(async (tx) => {
-      const academicYear = await tx.academicYear.findFirst({
-        where: { schoolId: sourceSchoolId },
-        orderBy: [{ createdAt: 'desc' }],
-        select: { id: true },
-      });
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const academicYear = await tx.academicYear.findFirst({
+          where: { schoolId: sourceSchoolId },
+          orderBy: [{ createdAt: 'desc' }],
+          select: { id: true },
+        });
 
-      for (const record of records) {
-        if (academicYear && record.classId) {
-          const existingHistory = await tx.academicYearStudentRecord.findFirst({
-            where: {
-              academicYearId: academicYear.id,
-              studentRecordId: record.id,
-              classId: record.classId,
-              sectionId: record.sectionId,
-            },
-            select: { id: true },
-          });
+        if (academicYear) {
+          const historyCandidates = records.filter((record) => record.classId);
+          if (historyCandidates.length > 0) {
+            const existingHistory = await tx.academicYearStudentRecord.findMany({
+              where: {
+                academicYearId: academicYear.id,
+                studentRecordId: { in: historyCandidates.map((record) => record.id) },
+              },
+              select: {
+                studentRecordId: true,
+                classId: true,
+                sectionId: true,
+              },
+            });
 
-          if (!existingHistory) {
-            await tx.academicYearStudentRecord.create({
-              data: {
+            const existingKeys = new Set(
+              existingHistory.map(
+                (row) => `${row.studentRecordId}|${row.classId || ''}|${row.sectionId || ''}`
+              )
+            );
+
+            const historyToCreate = historyCandidates
+              .filter(
+                (record) =>
+                  !existingKeys.has(
+                    `${record.id}|${record.classId || ''}|${record.sectionId || ''}`
+                  )
+              )
+              .map((record) => ({
                 academicYearId: academicYear.id,
                 studentRecordId: record.id,
                 classId: record.classId,
                 sectionId: record.sectionId,
-              },
-            });
+              }));
+
+            if (historyToCreate.length > 0) {
+              await tx.academicYearStudentRecord.createMany({ data: historyToCreate });
+            }
           }
         }
 
-        await tx.studentRecord.update({
-          where: { id: record.id },
+        await tx.studentRecord.updateMany({
+          where: { id: { in: recordIds } },
           data: {
             classId: data.targetClassId,
             sectionId: targetSectionId,
@@ -181,41 +200,70 @@ export async function POST(request: Request) {
 
         if (data.feeMode === 'KEEP_EXISTING') {
           await tx.studentFeeStructure.updateMany({
-            where: { studentRecordId: record.id },
+            where: { studentRecordId: { in: recordIds } },
             data: { classId: data.targetClassId },
           });
         } else {
-          const structure = await tx.studentFeeStructure.upsert({
-            where: { studentRecordId: record.id },
-            create: {
-              studentRecordId: record.id,
-              classId: data.targetClassId,
-              schoolId: sourceSchoolId,
-            },
-            update: {
-              classId: data.targetClassId,
-              schoolId: sourceSchoolId,
-            },
+          const existingStructures = await tx.studentFeeStructure.findMany({
+            where: { studentRecordId: { in: recordIds } },
+            select: { id: true, studentRecordId: true },
           });
+          const existingByRecord = new Map(
+            existingStructures.map((structure) => [structure.studentRecordId, structure.id])
+          );
 
-          await tx.studentFeeStructureItem.deleteMany({
-            where: { studentFeeStructureId: structure.id },
-          });
-
-          if (classFeeStructures.length > 0) {
-            await tx.studentFeeStructureItem.createMany({
-              data: classFeeStructures.map((item) => ({
-                studentFeeStructureId: structure.id,
-                feeHeadId: item.feeHeadId,
-                amount: item.amount,
+          const missingRecordIds = recordIds.filter((id) => !existingByRecord.has(id));
+          if (missingRecordIds.length > 0) {
+            await tx.studentFeeStructure.createMany({
+              data: missingRecordIds.map((studentRecordId) => ({
+                studentRecordId,
+                classId: data.targetClassId,
+                schoolId: sourceSchoolId,
               })),
             });
           }
-        }
-      }
 
-      return { promotedCount: records.length };
-    });
+          await tx.studentFeeStructure.updateMany({
+            where: { studentRecordId: { in: recordIds } },
+            data: {
+              classId: data.targetClassId,
+              schoolId: sourceSchoolId,
+            },
+          });
+
+          const structures = await tx.studentFeeStructure.findMany({
+            where: { studentRecordId: { in: recordIds } },
+            select: { id: true },
+          });
+          const structureIds = structures.map((structure) => structure.id);
+
+          if (structureIds.length > 0) {
+            await tx.studentFeeStructureItem.deleteMany({
+              where: { studentFeeStructureId: { in: structureIds } },
+            });
+
+            if (classFeeStructures.length > 0) {
+              await tx.studentFeeStructureItem.createMany({
+                data: structureIds.flatMap((studentFeeStructureId) =>
+                  classFeeStructures.map((item) => ({
+                    studentFeeStructureId,
+                    feeHeadId: item.feeHeadId,
+                    amount: item.amount,
+                  }))
+                ),
+              });
+            }
+          }
+        }
+
+        return { promotedCount: records.length };
+      },
+      {
+        // Full-class promotions can touch hundreds of students; default 5s interactive TX times out (P2028).
+        maxWait: 15_000,
+        timeout: 120_000,
+      }
+    );
 
     return NextResponse.json({
       message: `${result.promotedCount} student${result.promotedCount === 1 ? '' : 's'} promoted to ${targetClass.name}`,
@@ -227,6 +275,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ errors: error.issues }, { status: 400 });
     }
     console.error('Promote Students Error:', error);
+    const prismaCode = (error as { code?: string })?.code;
+    if (prismaCode === 'P2028') {
+      return NextResponse.json(
+        {
+          error:
+            'Promotion timed out. Try promoting fewer students at once, or retry — the server may have been busy.',
+        },
+        { status: 504 }
+      );
+    }
     return NextResponse.json({ error: 'Failed to promote students' }, { status: 500 });
   }
 }
