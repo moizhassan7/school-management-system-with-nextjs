@@ -2,6 +2,8 @@ import { auth } from '@/auth';
 import AttendanceDashboard from '@/components/attendance/attendance-dashboard';
 import { getSchoolSections, getTeacherSections } from '@/lib/actions/attendance';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default async function AttendancePage() {
   const session = await auth();
@@ -17,10 +19,19 @@ export default async function AttendancePage() {
     : await getTeacherSections(session.user.id);
 
   return (
-    <AttendanceDashboard
-      initialSections={sections}
-      userId={session.user.id}
-      seesAllClasses={seesAllClasses}
-    />
+    <div>
+      {seesAllClasses ? (
+        <div className="flex justify-end bg-gray-50 px-6 pt-6">
+          <Button asChild variant="outline">
+            <Link href="/attendance/devices">Biometric devices</Link>
+          </Button>
+        </div>
+      ) : null}
+      <AttendanceDashboard
+        initialSections={sections}
+        userId={session.user.id}
+        seesAllClasses={seesAllClasses}
+      />
+    </div>
   );
 }

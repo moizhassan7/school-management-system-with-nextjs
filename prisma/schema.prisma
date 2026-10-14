@@ -118,6 +118,10 @@ model School {
   payments Payment[]
   exams Exam[]
   subjects Subject[]
+  biometricGateways BiometricGateway[]
+  biometricDevices BiometricDevice[]
+  biometricAttendanceEvents BiometricAttendanceEvent[]
+  biometricAuditLogs BiometricAuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -212,6 +216,7 @@ model StudentRecord {
   academicYearRecords AcademicYearStudentRecord[]
   parents          Kinship[]
   feeStructure     StudentFeeStructure?
+  biometricMappings BiometricPersonMapping[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -234,6 +239,8 @@ model Campus {
   isActive    Boolean      @default(true)
   classGroups ClassGroup[]
   campusAccess CampusAccess[]
+  biometricGateways BiometricGateway[]
+  biometricDevices BiometricDevice[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 }
@@ -767,6 +774,7 @@ model StaffRecord {
   // Relations
   sectionsIncharged Section[]   // Sections this staff is incharge of
   assignments       SubjectAssignment[] // Classes/Subjects they teach
+  biometricMappings BiometricPersonMapping[]
 
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -779,6 +787,93 @@ enum AttendanceStatus {
   ABSENT
   LATE
   EXCUSED
+}
+
+enum BiometricProtocol {
+  HTTP
+  HTTPS
+}
+
+enum BiometricGatewayStatus {
+  PENDING
+  ONLINE
+  OFFLINE
+  DISABLED
+}
+
+enum BiometricDeviceStatus {
+  UNKNOWN
+  ONLINE
+  OFFLINE
+  DEGRADED
+  ARCHIVED
+}
+
+enum BiometricPersonType {
+  STUDENT
+  STAFF
+}
+
+enum BiometricEnrollmentStatus {
+  NOT_ENROLLED
+  USER_CREATED
+  AWAITING_PHYSICAL_ENROLLMENT
+  FACE_ENROLLED
+  FINGERPRINT_ENROLLED
+  FULLY_ENROLLED
+  ENROLLMENT_FAILED
+  UNSUPPORTED
+}
+
+enum BiometricEnrollmentModality {
+  USER
+  FACE
+  FINGERPRINT
+  CARD
+}
+
+enum BiometricJobStatus {
+  PENDING
+  DISPATCHED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum BiometricSyncJobType {
+  TEST_CONNECTION
+  PROBE_CAPABILITIES
+  SYNC_ATTENDANCE
+  SYNC_USERS
+  ENROLL_USER
+  REMOVE_USER
+  BACKFILL_EVENTS
+}
+
+enum BiometricEventStatus {
+  RAW
+  MATCHED
+  UNMATCHED
+  IGNORED
+  PROCESSED
+  FAILED
+}
+
+enum BiometricVerificationMethod {
+  UNKNOWN
+  FACE
+  FINGERPRINT
+  CARD
+  PASSWORD
+  QR
+  MULTI
+}
+
+enum BiometricDirection {
+  UNKNOWN
+  IN
+  OUT
 }
 
 model Attendance {
@@ -812,6 +907,266 @@ model Attendance {
   @@index([sectionId])
   @@index([schoolId, date])
   @@index([schoolId])
+}
+
+model BiometricGateway {
+  id              String                 @id @default(cuid())
+  schoolId        String
+  school          School                 @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  campusId        String?
+  campus          Campus?                @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  name            String
+  code            String                 @unique
+  status          BiometricGatewayStatus @default(PENDING)
+  lastHeartbeatAt DateTime?
+  version         String?
+  hostInfo        Json?
+  isActive        Boolean                @default(true)
+  disabledAt      DateTime?
+  credentials     BiometricGatewayCredential[]
+  devices         BiometricDevice[]
+  syncJobs        BiometricSyncJob[]
+  healthLogs      BiometricDeviceHealthLog[]
+  auditLogs       BiometricAuditLog[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([schoolId])
+  @@index([campusId])
+  @@index([status])
+}
+
+model BiometricGatewayCredential {
+  id         String           @id @default(cuid())
+  gatewayId  String
+  gateway    BiometricGateway @relation(fields: [gatewayId], references: [id], onDelete: Cascade)
+  keyId      String           @unique
+  secretHash String
+  label      String?
+  active     Boolean          @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime         @default(now())
+  rotatedAt  DateTime?
+
+  @@index([gatewayId, active])
+}
+
+model BiometricDevice {
+  id                  String                @id @default(cuid())
+  schoolId            String
+  school              School                @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  campusId            String
+  campus              Campus                @relation(fields: [campusId], references: [id], onDelete: Restrict)
+  gatewayId           String?
+  gateway             BiometricGateway?     @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  name                String
+  model               String                @default("DS-K1T342MFX")
+  serialNumber        String?
+  lanIp               String
+  port                Int                   @default(80)
+  protocol            BiometricProtocol     @default(HTTP)
+  username            String
+  passwordEncrypted   String
+  location            String?
+  attendanceRole      String                @default("ENTRY")
+  syncIntervalSeconds Int                   @default(60)
+  status              BiometricDeviceStatus @default(UNKNOWN)
+  firmwareVersion     String?
+  capabilities        Json?
+  lastSeenAt          DateTime?
+  lastTestedAt        DateTime?
+  isActive            Boolean               @default(true)
+  archivedAt          DateTime?
+  mappings            BiometricPersonMapping[]
+  events              BiometricAttendanceEvent[]
+  cursors             BiometricSyncCursor[]
+  syncJobs            BiometricSyncJob[]
+  enrollmentJobs      BiometricEnrollmentJob[]
+  healthLogs          BiometricDeviceHealthLog[]
+  auditLogs           BiometricAuditLog[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@unique([gatewayId, lanIp, port])
+  @@unique([schoolId, serialNumber])
+  @@index([schoolId])
+  @@index([campusId])
+  @@index([gatewayId])
+  @@index([status])
+}
+
+model BiometricPersonMapping {
+  id                String                    @id @default(cuid())
+  schoolId          String
+  deviceId          String
+  device            BiometricDevice           @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  personType        BiometricPersonType
+  studentRecordId   String?
+  studentRecord     StudentRecord?            @relation(fields: [studentRecordId], references: [id], onDelete: Restrict)
+  staffRecordId     String?
+  staffRecord       StaffRecord?              @relation(fields: [staffRecordId], references: [id], onDelete: Restrict)
+  deviceEmployeeNo  String
+  deviceUserId      String?
+  enrollmentStatus  BiometricEnrollmentStatus @default(NOT_ENROLLED)
+  faceStatus        BiometricEnrollmentStatus @default(NOT_ENROLLED)
+  fingerprintStatus BiometricEnrollmentStatus @default(NOT_ENROLLED)
+  cardNo            String?
+  lastSyncedAt      DateTime?
+  latestScanAt      DateTime?
+  lastError         String?
+  isActive          Boolean                   @default(true)
+  removedAt         DateTime?
+  events            BiometricAttendanceEvent[]
+  enrollmentJobs    BiometricEnrollmentJob[]
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@unique([deviceId, deviceEmployeeNo])
+  @@unique([deviceId, studentRecordId])
+  @@unique([deviceId, staffRecordId])
+  @@index([schoolId])
+  @@index([studentRecordId])
+  @@index([staffRecordId])
+  @@index([personType])
+}
+
+model BiometricEnrollmentJob {
+  id              String                      @id @default(cuid())
+  schoolId        String
+  deviceId        String
+  device          BiometricDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  mappingId       String?
+  mapping         BiometricPersonMapping?     @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+  modality        BiometricEnrollmentModality
+  status          BiometricJobStatus          @default(PENDING)
+  requestedById   String?
+  requestedByName String?
+  payload         Json?
+  result          Json?
+  error           String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+
+  @@index([schoolId])
+  @@index([deviceId, status])
+  @@index([mappingId])
+}
+
+model BiometricAttendanceEvent {
+  id                 String                      @id @default(cuid())
+  schoolId           String
+  school             School                      @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  deviceId           String
+  device             BiometricDevice             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  mappingId          String?
+  mapping            BiometricPersonMapping?     @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+  sourceEventKey     String
+  gatewayEventId     String?
+  deviceSerial       String?
+  employeeNo         String?
+  eventTimestamp     DateTime
+  receivedAt         DateTime                    @default(now())
+  verificationMethod BiometricVerificationMethod @default(UNKNOWN)
+  eventType          String?
+  direction          BiometricDirection          @default(UNKNOWN)
+  status             BiometricEventStatus        @default(RAW)
+  rawPayload         Json
+  processedAt        DateTime?
+  processingError    String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@unique([deviceId, sourceEventKey])
+  @@index([schoolId, eventTimestamp])
+  @@index([deviceId, eventTimestamp])
+  @@index([mappingId])
+  @@index([status])
+  @@index([employeeNo])
+}
+
+model BiometricSyncCursor {
+  id           String          @id @default(cuid())
+  deviceId     String
+  device       BiometricDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  cursorType   String          @default("EVENTS")
+  cursorValue  String?
+  lastEventAt  DateTime?
+  lastEventKey String?
+  lastSyncedAt DateTime?
+  failureCount Int             @default(0)
+  lastError    String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([deviceId, cursorType])
+}
+
+model BiometricSyncJob {
+  id             String             @id @default(cuid())
+  schoolId       String
+  gatewayId      String?
+  gateway        BiometricGateway?  @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  deviceId       String?
+  device         BiometricDevice?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  type           BiometricSyncJobType
+  status         BiometricJobStatus @default(PENDING)
+  idempotencyKey String             @unique
+  payload        Json?
+  result         Json?
+  error          String?
+  notBefore      DateTime?
+  dispatchedAt   DateTime?
+  acknowledgedAt DateTime?
+  completedAt    DateTime?
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([schoolId, status])
+  @@index([gatewayId, status, createdAt])
+  @@index([deviceId, status])
+  @@index([type])
+}
+
+model BiometricDeviceHealthLog {
+  id         String            @id @default(cuid())
+  gatewayId  String?
+  gateway    BiometricGateway? @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  deviceId   String?
+  device     BiometricDevice?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  status     String
+  latencyMs  Int?
+  message    String?
+  details    Json?
+  recordedAt DateTime          @default(now())
+
+  @@index([gatewayId, recordedAt])
+  @@index([deviceId, recordedAt])
+}
+
+model BiometricAuditLog {
+  id         String            @id @default(cuid())
+  schoolId   String
+  school     School            @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  gatewayId  String?
+  gateway    BiometricGateway? @relation(fields: [gatewayId], references: [id], onDelete: SetNull)
+  deviceId   String?
+  device     BiometricDevice?  @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  actorId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime          @default(now())
+
+  @@index([schoolId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([gatewayId, createdAt])
+  @@index([actorId])
 }
 
 model SubjectAssignment {

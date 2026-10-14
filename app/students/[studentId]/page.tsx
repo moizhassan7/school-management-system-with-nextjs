@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { PersonBiometricTab } from '@/components/biometric/person-biometric-tab';
 
 export default function StudentProfilePage({ params }: { params: Promise<{ studentId: string }> }) {
     const { studentId } = use(params);
@@ -223,6 +224,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                             <TabsTrigger value="parents" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Parents & Guardians</TabsTrigger>
                             <TabsTrigger value="academics" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Academic History</TabsTrigger>
                             <TabsTrigger value="fees" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Fee Structure</TabsTrigger>
+                            <TabsTrigger value="biometric" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-1">Biometric Attendance</TabsTrigger>
                         </TabsList>
 
                         {/* 1. Personal Details Tab */}
@@ -362,6 +364,10 @@ export default function StudentProfilePage({ params }: { params: Promise<{ stude
                                     </Button>
                                 </CardContent>
                             </Card>
+                        </TabsContent>
+
+                        <TabsContent value="biometric">
+                            <PersonBiometricTab personType="STUDENT" studentRecordId={record?.id} />
                         </TabsContent>
                     </Tabs>
                 </div>

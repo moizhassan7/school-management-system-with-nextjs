@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "prisma migrate deploy && next start",
     "lint": "eslint",
-    "test": "npx tsx --test tests/security.test.ts tests/payment-concurrency.test.ts"
+    "test": "npx tsx --test tests/security.test.ts tests/payment-concurrency.test.ts",
+    "seed:biometric": "npx tsx scripts/seed-biometric-device.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

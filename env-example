@@ -7,5 +7,16 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/school?schema=public
 # Auth.js session signing secret. Generate with: openssl rand -base64 32
 AUTH_SECRET="replace-with-a-long-random-secret"
 
+# Secret used to encrypt Hikvision device passwords at rest.
+BIOMETRIC_CREDENTIAL_KEY="replace-with-a-long-random-secret"
+
+# Optional one-device Hikvision seed. Defaults to first school/campus and 192.168.1.64.
+HIKVISION_DEVICE_IP="192.168.1.64"
+HIKVISION_DEVICE_PORT="80"
+HIKVISION_DEVICE_PROTOCOL="HTTP"
+HIKVISION_DEVICE_USERNAME="admin"
+HIKVISION_DEVICE_PASSWORD="replace-with-device-password"
+HIKVISION_DEVICE_NAME="Main Gate DS-K1T342MFX"
+
 # Public origin used by Auth.js in production (https://your-domain)
 AUTH_URL="http://localhost:3000"

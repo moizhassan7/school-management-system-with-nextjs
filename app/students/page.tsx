@@ -13,6 +13,8 @@ import {
   FileSpreadsheet,
   Trash2,
   X,
+  GraduationCap,
+  Loader2,
 } from 'lucide-react';
 import { can } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
@@ -26,6 +28,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -55,6 +65,22 @@ type ClassGroupOption = {
   }[];
 };
 
+type PromoteMode = 'CLASS' | 'INDIVIDUAL';
+type FeeMode = 'KEEP_EXISTING' | 'SWITCH_TO_CLASS_DEFAULT';
+
+type StudentOption = {
+  id: string;
+  name: string;
+  email?: string | null;
+  studentRecord?: {
+    admissionNumber?: string | null;
+    rollNumber?: string | null;
+  } | null;
+};
+
+const ALL_SECTIONS = '__all_sections__';
+const NO_SECTION = '__no_section__';
+
 function fatherNameOf(student: any): string {
   const parents = student.studentRecord?.parents || [];
   const father = parents.find((p: any) => p.relationship === 'FATHER');
@@ -68,10 +94,12 @@ function fatherNameOf(student: any): string {
 export default function StudentsPage() {
   const { data: session } = useSession();
   const canDelete = can(session?.user, 'STUDENTS', 'DELETE');
+  const canPromote = can(session?.user, 'STUDENTS', 'EDIT');
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -83,6 +111,19 @@ export default function StudentsPage() {
   const [classGroupId, setClassGroupId] = useState('');
   const [classId, setClassId] = useState('');
   const [sectionId, setSectionId] = useState('');
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteMode, setPromoteMode] = useState<PromoteMode>('CLASS');
+  const [sourceGroupId, setSourceGroupId] = useState('');
+  const [sourceClassId, setSourceClassId] = useState('');
+  const [sourceSectionId, setSourceSectionId] = useState('');
+  const [targetGroupId, setTargetGroupId] = useState('');
+  const [targetClassId, setTargetClassId] = useState('');
+  const [targetSectionId, setTargetSectionId] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
+  const [loadingStudentOptions, setLoadingStudentOptions] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [feeMode, setFeeMode] = useState<FeeMode>('KEEP_EXISTING');
 
   useEffect(() => {
     fetch('/api/class-groups?view=options')
@@ -120,7 +161,40 @@ export default function StudentsPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [availableClasses, classId]);
 
+  const sourceClasses = useMemo(() => {
+    if (!sourceGroupId) return [];
+    return (classGroups.find((g) => g.id === sourceGroupId)?.classes || [])
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [classGroups, sourceGroupId]);
+
+  const sourceSections = useMemo(() => {
+    if (!sourceClassId) return [];
+    return (sourceClasses.find((c) => c.id === sourceClassId)?.sections || [])
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [sourceClasses, sourceClassId]);
+
+  const targetClasses = useMemo(() => {
+    if (!targetGroupId) return [];
+    return (classGroups.find((g) => g.id === targetGroupId)?.classes || [])
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [classGroups, targetGroupId]);
+
+  const targetSections = useMemo(() => {
+    if (!targetClassId) return [];
+    return (targetClasses.find((c) => c.id === targetClassId)?.sections || [])
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [targetClasses, targetClassId]);
+
   const hasFilters = !!(classGroupId || classId || sectionId);
+  const promoteDisabled =
+    promoting ||
+    !sourceClassId ||
+    !targetClassId ||
+    (promoteMode === 'INDIVIDUAL' && !selectedStudentId);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -162,12 +236,92 @@ export default function StudentsPage() {
       });
 
     return () => controller.abort();
-  }, [page, debouncedSearch, classGroupId, classId, sectionId]);
+  }, [page, debouncedSearch, classGroupId, classId, sectionId, refreshKey]);
+
+  useEffect(() => {
+    if (!promoteOpen || promoteMode !== 'INDIVIDUAL' || !sourceClassId) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      all: '1',
+      classId: sourceClassId,
+    });
+    if (sourceSectionId) params.set('sectionId', sourceSectionId);
+
+    setLoadingStudentOptions(true);
+    fetch(`/api/students?${params.toString()}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((payload) => {
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+        setStudentOptions(rows);
+        setSelectedStudentId((current) =>
+          rows.some((student: StudentOption) => student.id === current) ? current : ''
+        );
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        console.error(err);
+        setStudentOptions([]);
+        setSelectedStudentId('');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingStudentOptions(false);
+      });
+
+    return () => controller.abort();
+  }, [promoteOpen, promoteMode, sourceClassId, sourceSectionId]);
 
   const clearFilters = () => {
     setClassGroupId('');
     setClassId('');
     setSectionId('');
+  };
+
+  const resetPromotionForm = () => {
+    setPromoteMode('CLASS');
+    setSourceGroupId('');
+    setSourceClassId('');
+    setSourceSectionId('');
+    setTargetGroupId('');
+    setTargetClassId('');
+    setTargetSectionId('');
+    setSelectedStudentId('');
+    setStudentOptions([]);
+    setFeeMode('KEEP_EXISTING');
+  };
+
+  const submitPromotion = async () => {
+    setPromoting(true);
+    try {
+      const res = await fetch('/api/students/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: promoteMode,
+          sourceClassId,
+          sourceSectionId: sourceSectionId || null,
+          targetClassId,
+          targetSectionId: targetSectionId || null,
+          studentIds: promoteMode === 'INDIVIDUAL' ? [selectedStudentId] : undefined,
+          feeMode,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to promote students');
+      }
+
+      toast.success(data.message || 'Students promoted');
+      setPromoteOpen(false);
+      resetPromotionForm();
+      setRefreshKey((current) => current + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Promotion failed');
+    } finally {
+      setPromoting(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -202,6 +356,16 @@ export default function StudentsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
+          {canPromote && (
+            <Button
+              type="button"
+              variant="outline"
+              className="cursor-pointer gap-2 font-semibold border-primary/30 text-primary hover:bg-primary/5"
+              onClick={() => setPromoteOpen(true)}
+            >
+              <GraduationCap className="h-4 w-4" /> Promote
+            </Button>
+          )}
           <Link href="/reports">
             <Button variant="outline" className="cursor-pointer gap-2 font-semibold border-primary/30 text-primary hover:bg-primary/5">
               <FileSpreadsheet className="h-4 w-4" /> Class Reports
@@ -217,6 +381,235 @@ export default function StudentsPage() {
           </Link>
         </div>
       </div>
+
+      <Dialog
+        open={promoteOpen}
+        onOpenChange={(open) => {
+          if (promoting) return;
+          setPromoteOpen(open);
+          if (!open) resetPromotionForm();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Promote Students</DialogTitle>
+            <DialogDescription>
+              Move a full class or one student to another class in the same school.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
+              <Button
+                type="button"
+                variant={promoteMode === 'CLASS' ? 'default' : 'ghost'}
+                className="h-10"
+                onClick={() => {
+                  setPromoteMode('CLASS');
+                  setSelectedStudentId('');
+                }}
+              >
+                Full class
+              </Button>
+              <Button
+                type="button"
+                variant={promoteMode === 'INDIVIDUAL' ? 'default' : 'ghost'}
+                className="h-10"
+                onClick={() => setPromoteMode('INDIVIDUAL')}
+              >
+                Individual
+              </Button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground">From</h3>
+                <Select
+                  value={sourceGroupId || undefined}
+                  onValueChange={(value) => {
+                    setSourceGroupId(value);
+                    setSourceClassId('');
+                    setSourceSectionId('');
+                    setSelectedStudentId('');
+                  }}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Source class group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={sourceClassId || undefined}
+                  onValueChange={(value) => {
+                    setSourceClassId(value);
+                    setSourceSectionId('');
+                    setSelectedStudentId('');
+                  }}
+                  disabled={!sourceGroupId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder={sourceGroupId ? 'Source class' : 'Select group first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sourceClasses.map((cls) => (
+                      <SelectItem key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={sourceSectionId || ALL_SECTIONS}
+                  onValueChange={(value) => {
+                    setSourceSectionId(value === ALL_SECTIONS ? '' : value);
+                    setSelectedStudentId('');
+                  }}
+                  disabled={!sourceClassId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="All sections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_SECTIONS}>All sections</SelectItem>
+                    {sourceSections.map((sec) => (
+                      <SelectItem key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {promoteMode === 'INDIVIDUAL' && (
+                  <Select
+                    value={selectedStudentId || undefined}
+                    onValueChange={setSelectedStudentId}
+                    disabled={!sourceClassId || loadingStudentOptions || studentOptions.length === 0}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue
+                        placeholder={
+                          loadingStudentOptions
+                            ? 'Loading students...'
+                            : sourceClassId
+                              ? 'Select student'
+                              : 'Select source class first'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {studentOptions.map((student) => (
+                        <SelectItem key={student.id} value={student.id}>
+                          {student.name}
+                          {student.studentRecord?.rollNumber
+                            ? ` - Roll ${student.studentRecord.rollNumber}`
+                            : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground">To</h3>
+                <Select
+                  value={targetGroupId || undefined}
+                  onValueChange={(value) => {
+                    setTargetGroupId(value);
+                    setTargetClassId('');
+                    setTargetSectionId('');
+                  }}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Target class group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={targetClassId || undefined}
+                  onValueChange={(value) => {
+                    setTargetClassId(value);
+                    setTargetSectionId('');
+                  }}
+                  disabled={!targetGroupId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder={targetGroupId ? 'Target class' : 'Select group first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {targetClasses.map((cls) => (
+                      <SelectItem key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={targetSectionId || NO_SECTION}
+                  onValueChange={(value) => setTargetSectionId(value === NO_SECTION ? '' : value)}
+                  disabled={!targetClassId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="No section" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_SECTION}>No section</SelectItem>
+                    {targetSections.map((sec) => (
+                      <SelectItem key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Fee structure</h3>
+              <Select value={feeMode} onValueChange={(value) => setFeeMode(value as FeeMode)}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="KEEP_EXISTING">Keep existing student fee structures</SelectItem>
+                  <SelectItem value="SWITCH_TO_CLASS_DEFAULT">Replace with target class default fees</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={promoting}
+              onClick={() => setPromoteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={promoteDisabled} onClick={submitPromotion}>
+              {promoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Promote
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="bento-tile space-y-3 p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

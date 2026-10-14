@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import StaffForm from '@/components/staff-form';
 import { Button } from '@/components/ui/button';
+import { PersonBiometricTab } from '@/components/biometric/person-biometric-tab';
 
 export default function StaffDetailPage({ params }: { params: { staffId: string } }) {
   const { staffId } = params;
@@ -52,6 +53,7 @@ export default function StaffDetailPage({ params }: { params: { staffId: string 
         </Button>
       </div>
       <StaffForm staffId={staffId} initialData={data} onSuccess={() => { location.href = '/staff'; }} />
+      <PersonBiometricTab personType="STAFF" staffRecordId={data.id} />
     </div>
   );
 }
