@@ -24,6 +24,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
         }
 
+        const targetClass = await prisma.class.findFirst({
+            where: {
+                id: classId,
+                classGroup: { campus: { schoolId } },
+            },
+            select: { id: true },
+        });
+        if (!targetClass) {
+            return NextResponse.json({ error: 'Class not found in the selected school' }, { status: 404 });
+        }
+
         // 2. Fetch class default fee structure (fallback when student snapshot does not exist)
         const classFeeStructures = await prisma.feeStructure.findMany({
             where: { classId },
@@ -59,7 +70,8 @@ export async function POST(request: Request) {
                 schoolId,
                 month: parseInt(month),
                 year: parseInt(year),
-                studentId: { in: students.map(s => s.userId) }
+                studentId: { in: students.map(s => s.userId) },
+                status: { not: 'CANCELLED' },
             }
         });
 
@@ -68,6 +80,21 @@ export async function POST(request: Request) {
                 error: `Invoices for ${month}/${year} already exist for some students in this class.`
             }, { status: 409 });
         }
+
+        const cancelledCounts = await prisma.invoice.groupBy({
+            by: ['studentId'],
+            where: {
+                schoolId,
+                month: parseInt(month),
+                year: parseInt(year),
+                status: 'CANCELLED',
+                studentId: { in: students.map((student) => student.userId) },
+            },
+            _count: { _all: true },
+        });
+        const reissueNumberByStudent = new Map(
+            cancelledCounts.map((row) => [row.studentId, row._count._all + 1])
+        );
 
         // 5. Prepare Bulk Transactions
         const invoiceOperations = students.map(record => {
@@ -96,12 +123,15 @@ export async function POST(request: Request) {
 
             // Generate Invoice Number (e.g., INV-2024-10-STUDENTID)
             // Ideally use a sequence table, but this is safe for now
-            const invoiceNo = `INV-${year}${month.toString().padStart(2, '0')}-${record.admissionNumber}`;
+            const baseInvoiceNo = `INV-${year}${month.toString().padStart(2, '0')}-${record.admissionNumber}`;
+            const reissueNumber = reissueNumberByStudent.get(record.userId);
+            const invoiceNo = reissueNumber ? `${baseInvoiceNo}-R${reissueNumber}` : baseInvoiceNo;
 
             return prisma.invoice.create({
                 data: {
                     schoolId,
                     studentId: record.userId,
+                    classId,
                     invoiceNo,
                     month: parseInt(month),
                     year: parseInt(year),

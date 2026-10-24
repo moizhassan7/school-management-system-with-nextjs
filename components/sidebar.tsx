@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Users,
   Banknote,
@@ -25,6 +25,8 @@ import {
   Shield,
   Plus,
   ClipboardList,
+  Bell,
+  NotebookPen,
 } from 'lucide-react';
 import { can } from '@/lib/permissions';
 import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
@@ -54,6 +56,20 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
   );
   const [isExamsExpanded, setIsExamsExpanded] = useState(() => pathname.startsWith('/exams'));
   const [isReportsExpanded, setIsReportsExpanded] = useState(() => pathname.startsWith('/reports'));
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    let ignore = false;
+    void fetch('/api/notifications?page=1&pageSize=1', { cache: 'no-store' })
+      .then(async (response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (!ignore && payload) setUnreadNotifications(Number(payload.unreadCount) || 0);
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [pathname]);
 
   const isActive = (path: string) => pathname === path;
   const isPathActive = (path: string) => pathname.startsWith(path);
@@ -64,6 +80,7 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
   const canFees = can(user, 'FEES', 'VIEW');
   const canExams = can(user, 'EXAMS', 'VIEW');
   const canAttendance = can(user, 'ATTENDANCE', 'VIEW');
+  const canDiaries = can(user, 'DIARIES', 'VIEW');
   const canReports = can(user, 'REPORTS', 'VIEW');
   const canConfig = can(user, 'CONFIGURATION', 'VIEW');
   const canUsers = can(user, 'USERS', 'VIEW');
@@ -122,6 +139,23 @@ export function AppNav({ user, onNavigate, className }: AppNavProps) {
           <Link href="/" className={linkClass(isActive('/'))} onClick={go}>
             <Home className="h-4 w-4" />
             Dashboard
+          </Link>
+        )}
+
+        <Link href="/notifications" className={linkClass(isPathActive('/notifications'))} onClick={go}>
+          <Bell className="h-4 w-4" />
+          <span className="flex-1">Notifications</span>
+          {unreadNotifications > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-white">
+              {unreadNotifications > 99 ? '99+' : unreadNotifications}
+            </span>
+          )}
+        </Link>
+
+        {canDiaries && (
+          <Link href="/diaries" className={linkClass(isPathActive('/diaries'))} onClick={go}>
+            <NotebookPen className="h-4 w-4" />
+            Homework Diary
           </Link>
         )}
 

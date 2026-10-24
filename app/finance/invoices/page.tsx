@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { 
     Search, 
@@ -13,6 +13,7 @@ import {
     XCircle,
     FileText,
     Wallet,
+    Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from 'sonner';
@@ -34,12 +35,36 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import { ListPagination } from '@/components/list-pagination';
 import { EmptyState } from '@/components/empty-state';
 
+type InvoiceRow = {
+    id: string;
+    invoiceNo: string;
+    totalAmount: number | string;
+    paidAmount: number | string;
+    dueDate: string;
+    updatedAt?: string;
+    status: string;
+    student?: {
+        name?: string | null;
+        email?: string | null;
+    } | null;
+};
+
 export default function InvoicesPage() {
-    const [invoices, setInvoices] = useState<any[]>([]);
+    const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState<string>('ALL');
     const [search, setSearch] = useState('');
@@ -48,34 +73,44 @@ export default function InvoicesPage() {
     const [total, setTotal] = useState(0);
     const pageSize = 25;
     const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+    const [pendingCancel, setPendingCancel] = useState<InvoiceRow | null>(null);
 
     useEffect(() => {
-        const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+        const t = setTimeout(() => {
+            setDebouncedSearch(search.trim());
+            setPage(1);
+            setLoading(true);
+        }, 300);
         return () => clearTimeout(t);
     }, [search]);
 
-    useEffect(() => {
-        setPage(1);
-    }, [filterStatus, debouncedSearch]);
+    const fetchInvoices = useCallback(async () => {
+        const params = new URLSearchParams({
+            page: String(page),
+            pageSize: String(pageSize),
+        });
+        if (filterStatus !== 'ALL') params.set('status', filterStatus);
+        if (debouncedSearch) params.set('q', debouncedSearch);
+
+        const res = await fetch(`/api/finance/invoices?${params}`);
+        if (!res.ok) throw new Error('Failed to load invoices');
+        const payload = await res.json();
+
+        if (Array.isArray(payload)) {
+            return { invoices: payload as InvoiceRow[], total: payload.length };
+        }
+        return {
+            invoices: Array.isArray(payload.data) ? payload.data as InvoiceRow[] : [],
+            total: Number(payload.total) || 0,
+        };
+    }, [debouncedSearch, filterStatus, page]);
 
     const loadInvoices = async () => {
         setLoading(true);
         try {
-            const params = new URLSearchParams({
-                page: String(page),
-                pageSize: String(pageSize),
-            });
-            if (filterStatus !== 'ALL') params.set('status', filterStatus);
-            if (debouncedSearch) params.set('q', debouncedSearch);
-            const res = await fetch(`/api/finance/invoices?${params}`);
-            const payload = await res.json();
-            if (Array.isArray(payload)) {
-                setInvoices(payload);
-                setTotal(payload.length);
-            } else {
-                setInvoices(Array.isArray(payload.data) ? payload.data : []);
-                setTotal(Number(payload.total) || 0);
-            }
+            const result = await fetchInvoices();
+            setInvoices(result.invoices);
+            setTotal(result.total);
         } catch {
             setInvoices([]);
             setTotal(0);
@@ -85,8 +120,27 @@ export default function InvoicesPage() {
     };
 
     useEffect(() => {
-        loadInvoices();
-    }, [page, filterStatus, debouncedSearch]);
+        let ignore = false;
+
+        void fetchInvoices()
+            .then((result) => {
+                if (ignore) return;
+                setInvoices(result.invoices);
+                setTotal(result.total);
+            })
+            .catch(() => {
+                if (ignore) return;
+                setInvoices([]);
+                setTotal(0);
+            })
+            .finally(() => {
+                if (!ignore) setLoading(false);
+            });
+
+        return () => {
+            ignore = true;
+        };
+    }, [fetchInvoices]);
 
     const handleSendInvoice = async (invoiceId: string) => {
         setActionLoadingId(invoiceId);
@@ -112,10 +166,12 @@ export default function InvoicesPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to update invoice');
-            toast.success('Invoice updated');
+            toast.success(action === 'CANCEL' ? 'Invoice cancelled' : 'Invoice updated');
             await loadInvoices();
+            return true;
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to update invoice');
+            return false;
         } finally {
             setActionLoadingId(null);
         }
@@ -160,6 +216,42 @@ export default function InvoicesPage() {
 
     return (
         <div className="page-content mx-auto w-full max-w-[1600px] space-y-6">
+            <AlertDialog
+                open={Boolean(pendingCancel)}
+                onOpenChange={(open) => {
+                    if (!open && actionLoadingId !== pendingCancel?.id) setPendingCancel(null);
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Cancel {pendingCancel?.invoiceNo}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This cancels the invoice for {pendingCancel?.student?.name || 'this student'} while keeping it in the financial record. Invoices with a received payment cannot be cancelled.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={actionLoadingId === pendingCancel?.id}>
+                            Keep invoice
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            disabled={actionLoadingId === pendingCancel?.id}
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                if (!pendingCancel) return;
+                                void handleStatusUpdate(pendingCancel.id, 'CANCEL').then((updated) => {
+                                    if (updated) setPendingCancel(null);
+                                });
+                            }}
+                        >
+                            {actionLoadingId === pendingCancel?.id ? 'Cancelling…' : (
+                                <><Trash2 className="mr-2 h-4 w-4" /> Cancel invoice</>
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                 <div>
                     <h1 className="font-heading text-3xl font-bold tracking-tight text-foreground">Invoices & Payments</h1>
@@ -246,7 +338,11 @@ export default function InvoicesPage() {
                                     key={status}
                                     variant={filterStatus === status ? 'default' : 'outline'}
                                     className="cursor-pointer"
-                                    onClick={() => setFilterStatus(status)}
+                                    onClick={() => {
+                                        setLoading(true);
+                                        setPage(1);
+                                        setFilterStatus(status);
+                                    }}
                                 >
                                     {status}
                                 </Badge>
@@ -328,6 +424,7 @@ export default function InvoicesPage() {
                                                         ${inv.status === 'OVERDUE' ? 'border-red-200 bg-red-100 text-red-700' : ''}
                                                         ${inv.status === 'UNPAID' ? 'border-amber-200 bg-amber-100 text-amber-700' : ''}
                                                         ${inv.status === 'PARTIAL' ? 'border-primary/30 bg-secondary text-primary' : ''}
+                                                        ${inv.status === 'CANCELLED' ? 'border-slate-200 bg-slate-100 text-slate-600' : ''}
                                                         shadow-none
                                                     `}
                                                 >
@@ -360,13 +457,26 @@ export default function InvoicesPage() {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'MARK_PAID')}>
+                                                            <DropdownMenuItem
+                                                                disabled={inv.status === 'CANCELLED'}
+                                                                onClick={() => handleStatusUpdate(inv.id, 'MARK_PAID')}
+                                                            >
                                                                 Mark paid
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'MARK_UNPAID')}>
+                                                            <DropdownMenuItem
+                                                                disabled={inv.status === 'CANCELLED'}
+                                                                onClick={() => handleStatusUpdate(inv.id, 'MARK_UNPAID')}
+                                                            >
                                                                 Mark unpaid
                                                             </DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleStatusUpdate(inv.id, 'CANCEL')}>
+                                                            <DropdownMenuItem
+                                                                className="text-destructive focus:text-destructive"
+                                                                disabled={
+                                                                    !['UNPAID', 'OVERDUE'].includes(inv.status) ||
+                                                                    Number(inv.paidAmount) > 0
+                                                                }
+                                                                onClick={() => setPendingCancel(inv)}
+                                                            >
                                                                 Cancel invoice
                                                             </DropdownMenuItem>
                                                         </DropdownMenuContent>
@@ -384,7 +494,10 @@ export default function InvoicesPage() {
                             page={page}
                             pageSize={pageSize}
                             total={total}
-                            onPageChange={setPage}
+                            onPageChange={(nextPage) => {
+                                setLoading(true);
+                                setPage(nextPage);
+                            }}
                             disabled={loading}
                         />
                     </div>

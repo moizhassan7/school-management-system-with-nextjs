@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { canCancelInvoice } from '@/lib/invoice-cancellation';
 
 const updateSchema = z.object({
   action: z.enum(['CANCEL', 'MARK_PAID', 'MARK_UNPAID']),
@@ -86,11 +87,46 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (invoice.status === 'CANCELLED' && action !== 'CANCEL') {
+      return NextResponse.json(
+        { error: 'Cancelled invoices cannot be reopened; generate a replacement invoice instead' },
+        { status: 409 }
+      );
+    }
+
     const statusMap: Record<'CANCEL' | 'MARK_PAID' | 'MARK_UNPAID', 'CANCELLED' | 'PAID' | 'UNPAID'> = {
       CANCEL: 'CANCELLED',
       MARK_PAID: 'PAID',
       MARK_UNPAID: 'UNPAID',
     };
+
+    if (action === 'CANCEL') {
+      if (!canCancelInvoice(invoice)) {
+        return NextResponse.json(
+          { error: 'Only unpaid invoices without any received payment can be cancelled' },
+          { status: 409 }
+        );
+      }
+
+      const cancelled = await prisma.invoice.updateMany({
+        where: {
+          id: invoiceId,
+          paidAmount: 0,
+          status: { in: ['UNPAID', 'OVERDUE'] },
+        },
+        data: { status: 'CANCELLED' },
+      });
+
+      if (cancelled.count === 0) {
+        return NextResponse.json(
+          { error: 'The invoice received a payment and can no longer be cancelled' },
+          { status: 409 }
+        );
+      }
+
+      const updated = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+      return NextResponse.json(updated);
+    }
 
     const nextStatus = statusMap[action];
     const updated = await prisma.invoice.update({

@@ -3,6 +3,9 @@ import test from 'node:test';
 import { stripSecrets, assertSameSchool, type AppSession } from '../lib/authz';
 import { hashPassword, legacySha256, verifyPassword, wrapLegacySha256 } from '../lib/password';
 import { PaymentRejectedError } from '../lib/payments';
+import { canCancelInvoice } from '../lib/invoice-cancellation';
+import { uniqueRecipientIds } from '../lib/notification-targeting';
+import { canPublishDiary, canRejectDiary } from '../lib/diary-workflow';
 
 function session(role: string, schoolId: string): AppSession {
   return { user: { role, schoolId, id: 'u1' } };
@@ -53,4 +56,28 @@ test('PaymentRejectedError is distinguishable for overpay races', () => {
   const error = new PaymentRejectedError('Amount exceeds pending balance or invoice is not payable');
   assert.equal(error.name, 'PaymentRejectedError');
   assert.match(error.message, /pending balance/);
+});
+
+test('only invoices without payments can be cancelled', () => {
+  assert.equal(canCancelInvoice({ status: 'UNPAID', paidAmount: 0 }), true);
+  assert.equal(canCancelInvoice({ status: 'OVERDUE', paidAmount: '0.00' }), true);
+  assert.equal(canCancelInvoice({ status: 'PARTIAL', paidAmount: 500 }), false);
+  assert.equal(canCancelInvoice({ status: 'PAID', paidAmount: 1000 }), false);
+  assert.equal(canCancelInvoice({ status: 'CANCELLED', paidAmount: 0 }), false);
+});
+
+test('notification recipients are deduplicated across students and linked parents', () => {
+  assert.deepEqual(
+    uniqueRecipientIds(['student-1', 'parent-1', 'parent-1', null, undefined, 'student-2']),
+    ['student-1', 'parent-1', 'student-2']
+  );
+});
+
+test('homework diaries can only move through valid review states', () => {
+  assert.equal(canPublishDiary('PENDING_APPROVAL'), true);
+  assert.equal(canPublishDiary('REJECTED'), true);
+  assert.equal(canPublishDiary('PUBLISHED'), false);
+  assert.equal(canRejectDiary('PENDING_APPROVAL'), true);
+  assert.equal(canRejectDiary('REJECTED'), false);
+  assert.equal(canRejectDiary('PUBLISHED'), false);
 });

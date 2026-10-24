@@ -14,6 +14,8 @@ export const MODULES = [
   'SETTINGS',
   'USERS',
   'CONFIGURATION',
+  'NOTIFICATIONS',
+  'DIARIES',
 ] as const;
 
 export const ACTIONS = [
@@ -53,6 +55,7 @@ export const PATH_MODULE_MAP: { prefix: string; module: ModuleKey }[] = [
   { prefix: '/exams', module: 'EXAMS' },
   { prefix: '/finance', module: 'FEES' },
   { prefix: '/reports', module: 'REPORTS' },
+  { prefix: '/diaries', module: 'DIARIES' },
 ];
 
 type AuthUser = {
@@ -118,6 +121,8 @@ export const ROLE_DEFAULT_MODULES: Record<
     SETTINGS: [...ACTIONS],
     USERS: [...ACTIONS],
     CONFIGURATION: [...ACTIONS],
+    NOTIFICATIONS: [...ACTIONS],
+    DIARIES: [...ACTIONS],
   },
   TEACHER: {
     DASHBOARD: ['VIEW'],
@@ -125,6 +130,7 @@ export const ROLE_DEFAULT_MODULES: Record<
     ATTENDANCE: ['VIEW', 'CREATE', 'EDIT'],
     EXAMS: ['VIEW', 'CREATE', 'EDIT'],
     REPORTS: ['VIEW'],
+    DIARIES: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   },
   ACCOUNTANT: {
     DASHBOARD: ['VIEW'],
@@ -139,9 +145,11 @@ export const ROLE_DEFAULT_MODULES: Record<
   },
   STUDENT: {
     DASHBOARD: ['VIEW'],
+    DIARIES: ['VIEW'],
   },
   PARENT: {
     DASHBOARD: ['VIEW'],
+    DIARIES: ['VIEW'],
   },
 };
 

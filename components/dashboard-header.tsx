@@ -1,6 +1,7 @@
 'use client';
 
 import { Search, Bell, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 import { useSchoolBrand } from '@/contexts/SchoolBrandContext';
 
 interface DashboardHeaderProps {
@@ -51,14 +52,13 @@ export default function DashboardHeader({ user }: DashboardHeaderProps) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
+          <Link
+            href="/notifications"
             className="relative cursor-pointer rounded-xl p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-card bg-destructive" />
-          </button>
+          </Link>
           <button
             type="button"
             className="cursor-pointer rounded-xl p-2.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"

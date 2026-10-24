@@ -35,11 +35,15 @@ export async function POST(request: Request) {
 
     const student = await prisma.user.findUnique({
       where: { id: data.studentId },
-      select: { schoolId: true, studentRecord: { select: { admissionNumber: true } } },
+      select: {
+        schoolId: true,
+        studentRecord: { select: { admissionNumber: true, classId: true } },
+      },
     });
     if (!student?.studentRecord) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
+    const studentRecord = student.studentRecord;
     const denied = assertSameSchool(session, student.schoolId);
     if (denied) return denied;
     if (student.schoolId !== schoolId) {
@@ -102,13 +106,14 @@ export async function POST(request: Request) {
       }
 
       const totalAmount = requestedItems.reduce((sum, item) => sum + Number(item.amount), 0);
-      const admission = student.studentRecord?.admissionNumber || 'STU';
+      const admission = studentRecord.admissionNumber || 'STU';
       const invoiceNo = `INV-${data.year}${String(data.month).padStart(2, '0')}-${admission}-${Date.now().toString().slice(-6)}`;
 
       const created = await tx.invoice.create({
         data: {
           schoolId,
           studentId: data.studentId,
+          classId: studentRecord.classId,
           month: data.month,
           year: data.year,
           dueDate: new Date(data.dueDate),
